@@ -1,0 +1,151 @@
+import com.github.spotbugs.snom.Confidence
+import com.github.spotbugs.snom.Effort
+
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.5.13'
+	id 'io.spring.dependency-management' version '1.1.7'
+	id 'com.diffplug.spotless' version '8.4.0'
+	id 'checkstyle'
+	id 'pmd'
+	id 'com.github.spotbugs' version '6.4.8'
+}
+
+group = 'com.example'
+version = '0.0.1-SNAPSHOT'
+
+ext {
+	versions = [
+			lombok   : '1.18.44',
+			springdoc: '2.8.5'
+	]
+}
+
+java {
+	toolchain {
+		languageVersion = JavaLanguageVersion.of(25)
+	}
+}
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.springframework.boot:spring-boot-starter-validation'
+//	implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+//	implementation 'org.liquibase:liquibase-core'
+//	runtimeOnly 'org.postgresql:postgresql'
+//	implementation 'org.springframework.boot:spring-boot-starter-data-mongodb'
+//	testImplementation 'org.testcontainers:mongodb'
+
+	implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${versions.springdoc}"
+
+	compileOnly "org.projectlombok:lombok:${versions.lombok}"
+	annotationProcessor "org.projectlombok:lombok:${versions.lombok}"
+
+	testCompileOnly "org.projectlombok:lombok:${versions.lombok}"
+	testAnnotationProcessor "org.projectlombok:lombok:${versions.lombok}"
+
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}
+
+// Developer notes:
+// `gradlew spotlessCheck`  - checks whether code matches formatting rules
+// `gradlew spotlessApply`  - rewrites code to match formatting rules
+spotless {
+	java {
+		// Target all Java files under src/main/java and src/test/java.
+		target 'src/*/java/**/*.java'
+
+		// Use Google Java Format as the single source of formatting rules.
+		googleJavaFormat()
+
+		// Keep imports clean and consistent.
+		removeUnusedImports()
+
+		// Keep annotation layout consistent across the project.
+		formatAnnotations()
+	}
+}
+
+// `gradlew checkstyleMain` - checks production source code style
+// `gradlew checkstyleTest` - checks test source code style
+// `gradlew check` - runs the standard verification lifecycle, including Checkstyle
+checkstyle {
+	// Current Checkstyle version.
+	toolVersion = '13.4.0'
+
+	// Fail the build if any violations are found.
+	ignoreFailures = false
+
+	// Show violations in the console output.
+	showViolations = true
+
+	// Use the official Google Java Style config packaged inside the Checkstyle JAR.
+//	def archive = configurations.checkstyle.resolve().find {
+//		it.name.startsWith('checkstyle')
+//	}
+//	config = resources.text.fromArchiveEntry(archive, 'google_checks.xml')
+	// Use custom local config with disabled Javadoc requirements [web:10]
+	config = resources.text.fromFile(file('config/checkstyle/google_checks.xml'))
+}
+
+// Developer notes:
+// `gradlew pmdMain` - analyzes production source code
+// `gradlew pmdTest` - analyzes test source code
+// `gradlew check` - runs the standard verification lifecycle, including PMD
+pmd {
+	// Current PMD version.
+	toolVersion = '7.23.0'
+
+	// Print violations to the console.
+	consoleOutput = true
+
+	// Do not use Gradle's default PMD rulesets.
+	// We want to use only our custom ruleset file.
+	ruleSets = []
+
+	// Use the project-specific PMD ruleset.
+	ruleSetFiles = files('config/pmd/pmd-rules.xml')
+}
+
+tasks.named('pmdMain') {
+	// Fail the build if PMD finds violations.
+	ignoreFailures = false
+}
+
+// `gradlew spotbugsMain` - analyzes compiled production classes
+// `gradlew spotbugsTest` - analyzes compiled test classes
+// `gradlew check` - runs the standard verification lifecycle, including SpotBugs
+spotbugs {
+	// Configure analysis sensitivity.
+	effort = Effort.valueOf('MAX')
+	reportLevel = Confidence.valueOf('LOW')
+
+	// Use project-specific exclusions for false positives.
+	excludeFilter = file('config/spotbugs/spotbugs-exclude.xml')
+
+	// Do not ignore violations globally.
+	ignoreFailures = false
+
+	// Show progress during analysis.
+	showProgress = true
+}
+
+tasks.named('spotbugsMain') {
+	reports {
+		html.required = true
+		xml.required = false
+	}
+
+	// Fail the build if SpotBugs finds violations in main code.
+	ignoreFailures = false
+}
+

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+  <Match>
+    <Class name="~.*Test"/>
+  </Match>
+
+  <Match>
+    <Class name="~.*\.generated\..*"/>
+  </Match>
+
+  <Match>
+    <Class name="~.*\.model\..*"/>
+    <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2,URF_UNREAD_FIELD"/>
+  </Match>
+</FindBugsFilter>
