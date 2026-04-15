@@ -54,6 +54,27 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+
+	include '**/*Test.class'
+	exclude '**/*IntegrationTest.class'
+}
+
+tasks.register('integrationTest', Test) {
+	description = 'Runs integration tests.'
+	group = 'verification'
+
+	useJUnitPlatform()
+
+	testClassesDirs = sourceSets.test.output.classesDirs
+	classpath = sourceSets.test.runtimeClasspath
+
+	include '**/*IntegrationTest.class'
+
+	shouldRunAfter tasks.named('test')
+}
+
+tasks.named('check') {
+	dependsOn tasks.named('integrationTest')
 }
 
 // Developer notes:
