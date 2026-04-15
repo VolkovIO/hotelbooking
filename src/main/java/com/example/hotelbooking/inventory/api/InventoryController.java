@@ -4,12 +4,14 @@ import com.example.hotelbooking.inventory.application.command.AddRoomTypeCommand
 import com.example.hotelbooking.inventory.application.command.AddRoomTypeUseCase;
 import com.example.hotelbooking.inventory.application.command.RegisterHotelCommand;
 import com.example.hotelbooking.inventory.application.command.RegisterHotelUseCase;
+import com.example.hotelbooking.inventory.application.query.GetHotelByIdUseCase;
 import com.example.hotelbooking.inventory.domain.Hotel;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -25,6 +27,7 @@ public class InventoryController {
 
   private final RegisterHotelUseCase registerHotelUseCase;
   private final AddRoomTypeUseCase addRoomTypeUseCase;
+  private final GetHotelByIdUseCase getHotelByIdUseCase;
 
   @Operation(
       summary = "Register hotel",
@@ -59,6 +62,20 @@ public class InventoryController {
             new AddRoomTypeCommand(
                 java.util.UUID.fromString(hotelId), request.name(), request.guestCapacity()));
 
+    return HotelResponse.from(hotel);
+  }
+
+  @Operation(
+      summary = "Get hotel by id",
+      description =
+          """
+          Returns a hotel with its registered room types.
+
+          If the hotel does not exist, the API returns 404 Not Found.
+          """)
+  @GetMapping("/{hotelId}")
+  public HotelResponse getHotelById(@PathVariable String hotelId) {
+    Hotel hotel = getHotelByIdUseCase.execute(java.util.UUID.fromString(hotelId));
     return HotelResponse.from(hotel);
   }
 }
