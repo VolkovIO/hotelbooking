@@ -1,8 +1,8 @@
 package com.example.hotelbooking.booking.api;
 
-import com.example.hotelbooking.booking.application.CreateBookingCommand;
-import com.example.hotelbooking.booking.application.CreateBookingUseCase;
-import com.example.hotelbooking.booking.application.GetBookingByIdUseCase;
+import com.example.hotelbooking.booking.application.command.CreateBookingCommand;
+import com.example.hotelbooking.booking.application.command.CreateBookingUseCase;
+import com.example.hotelbooking.booking.application.query.GetBookingByIdUseCase;
 import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.booking.domain.BookingId;
 import io.swagger.v3.oas.annotations.Operation;

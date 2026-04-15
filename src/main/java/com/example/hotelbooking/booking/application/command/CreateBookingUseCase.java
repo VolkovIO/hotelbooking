@@ -1,7 +1,7 @@
-package com.example.hotelbooking.booking.application;
+package com.example.hotelbooking.booking.application.command;
 
+import com.example.hotelbooking.booking.application.port.BookingRepository;
 import com.example.hotelbooking.booking.domain.Booking;
-import com.example.hotelbooking.booking.domain.BookingRepository;
 import com.example.hotelbooking.booking.domain.StayPeriod;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

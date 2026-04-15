@@ -1,5 +1,6 @@
-package com.example.hotelbooking.booking.domain;
+package com.example.hotelbooking.booking.application.exception;
 
+import com.example.hotelbooking.booking.domain.BookingId;
 import java.io.Serial;
 
 public class BookingNotFoundException extends RuntimeException {

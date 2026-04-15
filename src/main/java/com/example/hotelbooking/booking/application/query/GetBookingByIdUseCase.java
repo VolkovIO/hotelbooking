@@ -1,9 +1,9 @@
-package com.example.hotelbooking.booking.application;
+package com.example.hotelbooking.booking.application.query;
 
+import com.example.hotelbooking.booking.application.exception.BookingNotFoundException;
+import com.example.hotelbooking.booking.application.port.BookingRepository;
 import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.booking.domain.BookingId;
-import com.example.hotelbooking.booking.domain.BookingNotFoundException;
-import com.example.hotelbooking.booking.domain.BookingRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

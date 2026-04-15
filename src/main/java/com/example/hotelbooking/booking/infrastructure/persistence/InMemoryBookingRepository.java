@@ -1,8 +1,8 @@
 package com.example.hotelbooking.booking.infrastructure.persistence;
 
+import com.example.hotelbooking.booking.application.port.BookingRepository;
 import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.booking.domain.BookingId;
-import com.example.hotelbooking.booking.domain.BookingRepository;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;

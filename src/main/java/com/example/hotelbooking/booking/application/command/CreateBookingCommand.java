@@ -1,4 +1,4 @@
-package com.example.hotelbooking.booking.application;
+package com.example.hotelbooking.booking.application.command;
 
 import java.time.LocalDate;
 import java.util.Objects;

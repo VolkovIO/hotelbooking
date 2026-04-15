@@ -1,7 +1,7 @@
 package com.example.hotelbooking.booking.api;
 
+import com.example.hotelbooking.booking.application.exception.BookingNotFoundException;
 import com.example.hotelbooking.booking.domain.BookingDomainException;
-import com.example.hotelbooking.booking.domain.BookingNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import org.springframework.http.HttpStatus;
