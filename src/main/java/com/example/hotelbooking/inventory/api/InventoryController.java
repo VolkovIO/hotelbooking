@@ -4,6 +4,8 @@ import com.example.hotelbooking.inventory.application.command.AddRoomTypeCommand
 import com.example.hotelbooking.inventory.application.command.AddRoomTypeUseCase;
 import com.example.hotelbooking.inventory.application.command.RegisterHotelCommand;
 import com.example.hotelbooking.inventory.application.command.RegisterHotelUseCase;
+import com.example.hotelbooking.inventory.application.command.SetRoomAvailabilityCommand;
+import com.example.hotelbooking.inventory.application.command.SetRoomAvailabilityUseCase;
 import com.example.hotelbooking.inventory.application.query.GetHotelByIdUseCase;
 import com.example.hotelbooking.inventory.domain.Hotel;
 import io.swagger.v3.oas.annotations.Operation;
@@ -14,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -28,6 +31,7 @@ public class InventoryController {
   private final RegisterHotelUseCase registerHotelUseCase;
   private final AddRoomTypeUseCase addRoomTypeUseCase;
   private final GetHotelByIdUseCase getHotelByIdUseCase;
+  private final SetRoomAvailabilityUseCase setRoomAvailabilityUseCase;
 
   @Operation(
       summary = "Register hotel",
@@ -77,5 +81,28 @@ public class InventoryController {
   public HotelResponse getHotelById(@PathVariable String hotelId) {
     Hotel hotel = getHotelByIdUseCase.execute(java.util.UUID.fromString(hotelId));
     return HotelResponse.from(hotel);
+  }
+
+  @Operation(
+      summary = "Set room availability",
+      description =
+          """
+          Sets daily room availability for the specified hotel and room type within the given date range.
+
+          The range is inclusive on both ends.
+          """)
+  @PutMapping("/{hotelId}/room-types/{roomTypeId}/availability")
+  @ResponseStatus(HttpStatus.OK)
+  public void setRoomAvailability(
+      @PathVariable String hotelId,
+      @PathVariable String roomTypeId,
+      @Valid @RequestBody SetRoomAvailabilityRequest request) {
+    setRoomAvailabilityUseCase.execute(
+        new SetRoomAvailabilityCommand(
+            java.util.UUID.fromString(hotelId),
+            java.util.UUID.fromString(roomTypeId),
+            request.from(),
+            request.to(),
+            request.totalRooms()));
   }
 }
