@@ -1,6 +1,8 @@
 package com.example.hotelbooking.common.api;
 
 import com.example.hotelbooking.booking.application.exception.BookingNotFoundException;
+import com.example.hotelbooking.booking.application.exception.HotelReferenceNotFoundException;
+import com.example.hotelbooking.booking.application.exception.RoomTypeReferenceNotFoundException;
 import com.example.hotelbooking.booking.domain.BookingDomainException;
 import com.example.hotelbooking.inventory.application.exception.HotelNotFoundException;
 import com.example.hotelbooking.inventory.domain.InventoryDomainException;
@@ -85,5 +87,21 @@ public class GlobalExceptionHandler {
       InventoryDomainException exception, HttpServletRequest request) {
     return ApiErrorResponse.of(
         "INVENTORY_DOMAIN_ERROR", exception.getMessage(), request.getRequestURI());
+  }
+
+  @ExceptionHandler(HotelReferenceNotFoundException.class)
+  @ResponseStatus(HttpStatus.NOT_FOUND)
+  public ApiErrorResponse handleHotelReferenceNotFoundException(
+      HotelReferenceNotFoundException exception, HttpServletRequest request) {
+    return ApiErrorResponse.of(
+        "HOTEL_REFERENCE_NOT_FOUND", exception.getMessage(), request.getRequestURI());
+  }
+
+  @ExceptionHandler(RoomTypeReferenceNotFoundException.class)
+  @ResponseStatus(HttpStatus.NOT_FOUND)
+  public ApiErrorResponse handleRoomTypeReferenceNotFoundException(
+      RoomTypeReferenceNotFoundException exception, HttpServletRequest request) {
+    return ApiErrorResponse.of(
+        "ROOM_TYPE_REFERENCE_NOT_FOUND", exception.getMessage(), request.getRequestURI());
   }
 }

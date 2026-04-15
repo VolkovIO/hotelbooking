@@ -1,6 +1,9 @@
 package com.example.hotelbooking.booking.application.command;
 
+import com.example.hotelbooking.booking.application.exception.HotelReferenceNotFoundException;
+import com.example.hotelbooking.booking.application.exception.RoomTypeReferenceNotFoundException;
 import com.example.hotelbooking.booking.application.port.BookingRepository;
+import com.example.hotelbooking.booking.application.port.InventoryLookupPort;
 import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.booking.domain.StayPeriod;
 import lombok.RequiredArgsConstructor;
@@ -11,8 +14,17 @@ import org.springframework.stereotype.Service;
 public class CreateBookingUseCase {
 
   private final BookingRepository bookingRepository;
+  private final InventoryLookupPort inventoryLookupPort;
 
   public Booking execute(CreateBookingCommand command) {
+    if (!inventoryLookupPort.hotelExists(command.hotelId())) {
+      throw new HotelReferenceNotFoundException(command.hotelId());
+    }
+
+    if (!inventoryLookupPort.roomTypeExists(command.hotelId(), command.roomTypeId())) {
+      throw new RoomTypeReferenceNotFoundException(command.hotelId(), command.roomTypeId());
+    }
+
     StayPeriod stayPeriod = new StayPeriod(command.checkIn(), command.checkOut());
 
     Booking booking =
