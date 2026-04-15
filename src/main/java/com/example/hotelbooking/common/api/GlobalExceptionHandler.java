@@ -1,7 +1,9 @@
-package com.example.hotelbooking.booking.api;
+package com.example.hotelbooking.common.api;
 
 import com.example.hotelbooking.booking.application.exception.BookingNotFoundException;
 import com.example.hotelbooking.booking.domain.BookingDomainException;
+import com.example.hotelbooking.inventory.application.exception.HotelNotFoundException;
+import com.example.hotelbooking.inventory.domain.InventoryDomainException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -68,5 +70,20 @@ public class GlobalExceptionHandler {
       MethodArgumentTypeMismatchException exception, HttpServletRequest request) {
     return ApiErrorResponse.of(
         "INVALID_PARAMETER", "Request parameter has invalid format", request.getRequestURI());
+  }
+
+  @ExceptionHandler(HotelNotFoundException.class)
+  @ResponseStatus(HttpStatus.NOT_FOUND)
+  public ApiErrorResponse handleHotelNotFoundException(
+      HotelNotFoundException exception, HttpServletRequest request) {
+    return ApiErrorResponse.of("HOTEL_NOT_FOUND", exception.getMessage(), request.getRequestURI());
+  }
+
+  @ExceptionHandler(InventoryDomainException.class)
+  @ResponseStatus(HttpStatus.BAD_REQUEST)
+  public ApiErrorResponse handleInventoryDomainException(
+      InventoryDomainException exception, HttpServletRequest request) {
+    return ApiErrorResponse.of(
+        "INVENTORY_DOMAIN_ERROR", exception.getMessage(), request.getRequestURI());
   }
 }
