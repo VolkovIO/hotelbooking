@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -181,6 +182,25 @@ class BookingControllerIntegrationTest {
         objectMapper.readTree(addRoomTypeResult.getResponse().getContentAsString());
 
     String roomTypeId = roomTypeJson.get("roomTypes").get(0).get("roomTypeId").asText();
+
+    String setAvailabilityRequest =
+        """
+        {
+          "from": "2030-01-01",
+          "to": "2030-12-31",
+          "totalRooms": 10
+        }
+        """;
+
+    mockMvc
+        .perform(
+            put(
+                    "/api/v1/admin/hotels/{hotelId}/room-types/{roomTypeId}/availability",
+                    hotelId,
+                    roomTypeId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(setAvailabilityRequest))
+        .andExpect(status().isOk());
 
     return new TestInventoryIds(hotelId, roomTypeId);
   }

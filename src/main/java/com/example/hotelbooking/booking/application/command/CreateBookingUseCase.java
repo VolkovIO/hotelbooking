@@ -1,6 +1,7 @@
 package com.example.hotelbooking.booking.application.command;
 
 import com.example.hotelbooking.booking.application.exception.HotelReferenceNotFoundException;
+import com.example.hotelbooking.booking.application.exception.RoomTypeNotAvailableException;
 import com.example.hotelbooking.booking.application.exception.RoomTypeReferenceNotFoundException;
 import com.example.hotelbooking.booking.application.port.BookingRepository;
 import com.example.hotelbooking.booking.application.port.InventoryLookupPort;
@@ -23,6 +24,11 @@ public class CreateBookingUseCase {
 
     if (!inventoryLookupPort.roomTypeExists(command.hotelId(), command.roomTypeId())) {
       throw new RoomTypeReferenceNotFoundException(command.hotelId(), command.roomTypeId());
+    }
+
+    if (!inventoryLookupPort.isRoomTypeAvailable(
+        command.hotelId(), command.roomTypeId(), command.checkIn(), command.checkOut())) {
+      throw new RoomTypeNotAvailableException(command.hotelId(), command.roomTypeId());
     }
 
     StayPeriod stayPeriod = new StayPeriod(command.checkIn(), command.checkOut());
