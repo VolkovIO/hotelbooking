@@ -1,6 +1,7 @@
 package com.example.hotelbooking.booking.api;
 
 import com.example.hotelbooking.booking.domain.BookingDomainException;
+import com.example.hotelbooking.booking.domain.BookingNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -13,6 +14,14 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+  @ExceptionHandler(BookingNotFoundException.class)
+  @ResponseStatus(HttpStatus.NOT_FOUND)
+  public ApiErrorResponse handleBookingNotFoundException(
+      BookingNotFoundException exception, HttpServletRequest request) {
+    return ApiErrorResponse.of(
+        "BOOKING_NOT_FOUND", exception.getMessage(), request.getRequestURI());
+  }
 
   @ExceptionHandler(BookingDomainException.class)
   @ResponseStatus(HttpStatus.BAD_REQUEST)
