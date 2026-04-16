@@ -7,6 +7,7 @@ import com.example.hotelbooking.booking.application.exception.RoomTypeNotAvailab
 import com.example.hotelbooking.booking.application.exception.RoomTypeReferenceNotFoundException;
 import com.example.hotelbooking.booking.domain.BookingDomainException;
 import com.example.hotelbooking.inventory.application.exception.HotelNotFoundException;
+import com.example.hotelbooking.inventory.application.exception.RoomHoldNotFoundException;
 import com.example.hotelbooking.inventory.domain.InventoryDomainException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
@@ -120,5 +121,13 @@ public class GlobalExceptionHandler {
   public ApiErrorResponse handleRoomHoldFailedException(
       RoomHoldFailedException exception, HttpServletRequest request) {
     return ApiErrorResponse.of("ROOM_HOLD_FAILED", exception.getMessage(), request.getRequestURI());
+  }
+
+  @ExceptionHandler(RoomHoldNotFoundException.class)
+  @ResponseStatus(HttpStatus.NOT_FOUND)
+  public ApiErrorResponse handleRoomHoldNotFoundException(
+      RoomHoldNotFoundException exception, HttpServletRequest request) {
+    return ApiErrorResponse.of(
+        "ROOM_HOLD_NOT_FOUND", exception.getMessage(), request.getRequestURI());
   }
 }
