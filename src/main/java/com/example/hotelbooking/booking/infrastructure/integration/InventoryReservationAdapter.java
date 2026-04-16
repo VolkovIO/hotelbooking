@@ -1,6 +1,7 @@
 package com.example.hotelbooking.booking.infrastructure.integration;
 
 import com.example.hotelbooking.booking.application.port.InventoryReservationPort;
+import com.example.hotelbooking.inventory.application.command.ConfirmRoomHoldUseCase;
 import com.example.hotelbooking.inventory.application.command.ReleaseRoomHoldUseCase;
 import com.example.hotelbooking.inventory.application.port.RoomAvailabilityRepository;
 import com.example.hotelbooking.inventory.application.port.RoomHoldRepository;
@@ -21,6 +22,7 @@ public class InventoryReservationAdapter implements InventoryReservationPort {
   private final RoomAvailabilityRepository roomAvailabilityRepository;
   private final RoomHoldRepository roomHoldRepository;
   private final ReleaseRoomHoldUseCase releaseRoomHoldUseCase;
+  private final ConfirmRoomHoldUseCase confirmRoomHoldUseCase;
 
   @Override
   public UUID placeHold(
@@ -55,5 +57,10 @@ public class InventoryReservationAdapter implements InventoryReservationPort {
   @Override
   public void releaseHold(UUID holdId) {
     releaseRoomHoldUseCase.execute(holdId);
+  }
+
+  @Override
+  public void confirmHold(UUID holdId) {
+    confirmRoomHoldUseCase.execute(holdId);
   }
 }
