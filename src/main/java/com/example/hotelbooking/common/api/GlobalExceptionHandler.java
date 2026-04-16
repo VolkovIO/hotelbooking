@@ -1,7 +1,14 @@
-package com.example.hotelbooking.booking.api;
+package com.example.hotelbooking.common.api;
 
 import com.example.hotelbooking.booking.application.exception.BookingNotFoundException;
+import com.example.hotelbooking.booking.application.exception.HotelReferenceNotFoundException;
+import com.example.hotelbooking.booking.application.exception.RoomHoldFailedException;
+import com.example.hotelbooking.booking.application.exception.RoomTypeNotAvailableException;
+import com.example.hotelbooking.booking.application.exception.RoomTypeReferenceNotFoundException;
 import com.example.hotelbooking.booking.domain.BookingDomainException;
+import com.example.hotelbooking.inventory.application.exception.HotelNotFoundException;
+import com.example.hotelbooking.inventory.application.exception.RoomHoldNotFoundException;
+import com.example.hotelbooking.inventory.domain.InventoryDomainException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -68,5 +75,59 @@ public class GlobalExceptionHandler {
       MethodArgumentTypeMismatchException exception, HttpServletRequest request) {
     return ApiErrorResponse.of(
         "INVALID_PARAMETER", "Request parameter has invalid format", request.getRequestURI());
+  }
+
+  @ExceptionHandler(HotelNotFoundException.class)
+  @ResponseStatus(HttpStatus.NOT_FOUND)
+  public ApiErrorResponse handleHotelNotFoundException(
+      HotelNotFoundException exception, HttpServletRequest request) {
+    return ApiErrorResponse.of("HOTEL_NOT_FOUND", exception.getMessage(), request.getRequestURI());
+  }
+
+  @ExceptionHandler(InventoryDomainException.class)
+  @ResponseStatus(HttpStatus.BAD_REQUEST)
+  public ApiErrorResponse handleInventoryDomainException(
+      InventoryDomainException exception, HttpServletRequest request) {
+    return ApiErrorResponse.of(
+        "INVENTORY_DOMAIN_ERROR", exception.getMessage(), request.getRequestURI());
+  }
+
+  @ExceptionHandler(HotelReferenceNotFoundException.class)
+  @ResponseStatus(HttpStatus.NOT_FOUND)
+  public ApiErrorResponse handleHotelReferenceNotFoundException(
+      HotelReferenceNotFoundException exception, HttpServletRequest request) {
+    return ApiErrorResponse.of(
+        "HOTEL_REFERENCE_NOT_FOUND", exception.getMessage(), request.getRequestURI());
+  }
+
+  @ExceptionHandler(RoomTypeReferenceNotFoundException.class)
+  @ResponseStatus(HttpStatus.NOT_FOUND)
+  public ApiErrorResponse handleRoomTypeReferenceNotFoundException(
+      RoomTypeReferenceNotFoundException exception, HttpServletRequest request) {
+    return ApiErrorResponse.of(
+        "ROOM_TYPE_REFERENCE_NOT_FOUND", exception.getMessage(), request.getRequestURI());
+  }
+
+  @ExceptionHandler(RoomTypeNotAvailableException.class)
+  @ResponseStatus(HttpStatus.CONFLICT)
+  public ApiErrorResponse handleRoomTypeNotAvailableException(
+      RoomTypeNotAvailableException exception, HttpServletRequest request) {
+    return ApiErrorResponse.of(
+        "ROOM_TYPE_NOT_AVAILABLE", exception.getMessage(), request.getRequestURI());
+  }
+
+  @ExceptionHandler(RoomHoldFailedException.class)
+  @ResponseStatus(HttpStatus.CONFLICT)
+  public ApiErrorResponse handleRoomHoldFailedException(
+      RoomHoldFailedException exception, HttpServletRequest request) {
+    return ApiErrorResponse.of("ROOM_HOLD_FAILED", exception.getMessage(), request.getRequestURI());
+  }
+
+  @ExceptionHandler(RoomHoldNotFoundException.class)
+  @ResponseStatus(HttpStatus.NOT_FOUND)
+  public ApiErrorResponse handleRoomHoldNotFoundException(
+      RoomHoldNotFoundException exception, HttpServletRequest request) {
+    return ApiErrorResponse.of(
+        "ROOM_HOLD_NOT_FOUND", exception.getMessage(), request.getRequestURI());
   }
 }
