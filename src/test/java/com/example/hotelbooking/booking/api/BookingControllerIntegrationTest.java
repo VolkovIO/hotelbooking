@@ -61,7 +61,7 @@ class BookingControllerIntegrationTest {
         inventoryIds.roomTypeId(),
         json.get("roomTypeId").asText(),
         "roomTypeId should match created room type");
-    assertEquals("NEW", json.get("status").asText(), "status should be NEW after creation");
+    assertEquals("ON_HOLD", json.get("status").asText(), "status should remain ON_HOLD");
   }
 
   @Test
@@ -105,7 +105,8 @@ class BookingControllerIntegrationTest {
 
     assertEquals(
         bookingId, json.get("bookingId").asText(), "bookingId should match created booking");
-    assertEquals("NEW", json.get("status").asText(), "status should remain NEW");
+    assertEquals(
+        "ON_HOLD", json.get("status").asText(), "status should be ON_HOLD after hold is placed");
   }
 
   @Test
