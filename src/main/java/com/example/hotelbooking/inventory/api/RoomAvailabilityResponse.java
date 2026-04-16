@@ -9,13 +9,15 @@ public record RoomAvailabilityResponse(
     @Schema(description = "Availability date", example = "2030-06-10") LocalDate date,
     @Schema(description = "Configured total rooms", example = "10") int totalRooms,
     @Schema(description = "Currently held rooms", example = "1") int heldRooms,
-    @Schema(description = "Currently available rooms", example = "9") int availableRooms) {
+    @Schema(description = "Currently booked rooms", example = "2") int bookedRooms,
+    @Schema(description = "Currently available rooms", example = "7") int availableRooms) {
 
   public static RoomAvailabilityResponse from(RoomAvailability roomAvailability) {
     return new RoomAvailabilityResponse(
         roomAvailability.getDate(),
         roomAvailability.getTotalRooms(),
         roomAvailability.getHeldRooms(),
+        roomAvailability.getBookedRooms(),
         roomAvailability.availableRooms());
   }
 }
