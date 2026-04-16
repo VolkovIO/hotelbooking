@@ -1,5 +1,7 @@
 package com.example.hotelbooking.booking.api;
 
+import com.example.hotelbooking.booking.application.command.CancelBookingCommand;
+import com.example.hotelbooking.booking.application.command.CancelBookingUseCase;
 import com.example.hotelbooking.booking.application.command.CreateBookingCommand;
 import com.example.hotelbooking.booking.application.command.CreateBookingUseCase;
 import com.example.hotelbooking.booking.application.query.GetBookingByIdUseCase;
@@ -26,6 +28,7 @@ public class BookingController {
 
   private final CreateBookingUseCase createBookingUseCase;
   private final GetBookingByIdUseCase getBookingByIdUseCase;
+  private final CancelBookingUseCase cancelBookingUseCase;
 
   @Operation(
       summary = "Create booking",
@@ -62,6 +65,21 @@ public class BookingController {
   @GetMapping("/{bookingId}")
   public BookingResponse getById(@PathVariable String bookingId) {
     Booking booking = getBookingByIdUseCase.execute(BookingId.from(bookingId));
+    return BookingResponse.from(booking);
+  }
+
+  @Operation(
+      summary = "Cancel booking",
+      description =
+          """
+          Cancels a booking that is currently on hold.
+
+          The associated inventory hold is released before the booking is marked as cancelled.
+          """)
+  @PostMapping("/{bookingId}/cancel")
+  public BookingResponse cancel(@PathVariable String bookingId) {
+    Booking booking =
+        cancelBookingUseCase.execute(new CancelBookingCommand(BookingId.from(bookingId)));
     return BookingResponse.from(booking);
   }
 }

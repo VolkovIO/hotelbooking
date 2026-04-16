@@ -60,7 +60,7 @@ public final class Booking {
   }
 
   public void cancel() {
-    ensureStatus(BookingStatus.CONFIRMED, "Only CONFIRMED booking can be cancelled");
+    ensureStatus(BookingStatus.ON_HOLD, "Only ON_HOLD booking can be cancelled");
     status = BookingStatus.CANCELLED;
   }
 
