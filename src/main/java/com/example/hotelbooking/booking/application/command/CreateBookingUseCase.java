@@ -9,6 +9,7 @@ import com.example.hotelbooking.booking.application.port.InventoryReservationPor
 import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.booking.domain.StayPeriod;
 import com.example.hotelbooking.inventory.domain.InventoryDomainException;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -29,11 +30,16 @@ public class CreateBookingUseCase {
       throw new RoomTypeReferenceNotFoundException(command.hotelId(), command.roomTypeId());
     }
 
+    UUID holdId;
     try {
-      inventoryReservationPort.placeHold(
-          command.hotelId(), command.roomTypeId(), command.checkIn(), command.checkOut(), 1);
+      holdId =
+          inventoryReservationPort.placeHold(
+              command.hotelId(), command.roomTypeId(), command.checkIn(), command.checkOut(), 1);
     } catch (InventoryDomainException exception) {
-      throw new RoomHoldFailedException(exception.getMessage(), exception);
+      throw new RoomHoldFailedException(
+          "Failed to place room hold for hotel %s and room type %s"
+              .formatted(command.hotelId(), command.roomTypeId()),
+          exception);
     }
 
     StayPeriod stayPeriod = new StayPeriod(command.checkIn(), command.checkOut());
@@ -41,7 +47,7 @@ public class CreateBookingUseCase {
     Booking booking =
         Booking.create(command.hotelId(), command.roomTypeId(), stayPeriod, command.guestCount());
 
-    booking.placeOnHold();
+    booking.placeOnHold(holdId);
 
     return bookingRepository.save(booking);
   }

@@ -12,6 +12,7 @@ public final class Booking {
   private final int guestCount;
 
   private BookingStatus status;
+  private UUID holdId;
 
   private Booking(
       BookingId id,
@@ -19,7 +20,8 @@ public final class Booking {
       UUID roomTypeId,
       StayPeriod stayPeriod,
       int guestCount,
-      BookingStatus status) {
+      BookingStatus status,
+      UUID holdId) {
 
     this.id = Objects.requireNonNull(id, "id must not be null");
     this.hotelId = Objects.requireNonNull(hotelId, "hotelId must not be null");
@@ -27,17 +29,19 @@ public final class Booking {
     this.stayPeriod = Objects.requireNonNull(stayPeriod, "stayPeriod must not be null");
     this.guestCount = requirePositive(guestCount, "guestCount must be positive");
     this.status = Objects.requireNonNull(status, "status must not be null");
+    this.holdId = holdId;
   }
 
   public static Booking create(
       UUID hotelId, UUID roomTypeId, StayPeriod stayPeriod, int guestCount) {
     return new Booking(
-        BookingId.newId(), hotelId, roomTypeId, stayPeriod, guestCount, BookingStatus.NEW);
+        BookingId.newId(), hotelId, roomTypeId, stayPeriod, guestCount, BookingStatus.NEW, null);
   }
 
-  public void placeOnHold() {
+  public void placeOnHold(UUID holdId) {
     ensureStatus(BookingStatus.NEW, "Only NEW booking can be placed on hold");
-    status = BookingStatus.ON_HOLD;
+    this.holdId = Objects.requireNonNull(holdId, "holdId must not be null");
+    this.status = BookingStatus.ON_HOLD;
   }
 
   public void confirm() {
@@ -82,6 +86,10 @@ public final class Booking {
 
   public BookingStatus getStatus() {
     return status;
+  }
+
+  public UUID getHoldId() {
+    return holdId;
   }
 
   private static int requirePositive(int value, String message) {

@@ -30,7 +30,7 @@ class BookingTest {
             new StayPeriod(LocalDate.now().plusDays(1), LocalDate.now().plusDays(3)),
             2);
 
-    booking.placeOnHold();
+    booking.placeOnHold(UUID.randomUUID());
 
     assertEquals(
         BookingStatus.ON_HOLD, booking.getStatus(), "Booking should transition to ON_HOLD status");
@@ -45,7 +45,7 @@ class BookingTest {
             new StayPeriod(LocalDate.now().plusDays(1), LocalDate.now().plusDays(3)),
             2);
 
-    booking.placeOnHold();
+    booking.placeOnHold(UUID.randomUUID());
     booking.confirm();
 
     assertEquals(
