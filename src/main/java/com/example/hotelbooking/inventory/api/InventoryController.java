@@ -7,6 +7,7 @@ import com.example.hotelbooking.inventory.application.command.RegisterHotelUseCa
 import com.example.hotelbooking.inventory.application.command.SetRoomAvailabilityCommand;
 import com.example.hotelbooking.inventory.application.command.SetRoomAvailabilityUseCase;
 import com.example.hotelbooking.inventory.application.query.GetHotelByIdUseCase;
+import com.example.hotelbooking.inventory.application.query.GetRoomAvailabilityUseCase;
 import com.example.hotelbooking.inventory.domain.Hotel;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -32,6 +34,7 @@ public class InventoryController {
   private final AddRoomTypeUseCase addRoomTypeUseCase;
   private final GetHotelByIdUseCase getHotelByIdUseCase;
   private final SetRoomAvailabilityUseCase setRoomAvailabilityUseCase;
+  private final GetRoomAvailabilityUseCase getRoomAvailabilityUseCase;
 
   @Operation(
       summary = "Register hotel",
@@ -104,5 +107,25 @@ public class InventoryController {
             request.from(),
             request.to(),
             request.totalRooms()));
+  }
+
+  @Operation(
+      summary = "Get room availability",
+      description =
+          """
+          Returns daily room availability for the specified hotel, room type, and date range.
+          """)
+  @GetMapping("/{hotelId}/room-types/{roomTypeId}/availability")
+  public java.util.List<RoomAvailabilityResponse> getRoomAvailability(
+      @PathVariable String hotelId,
+      @PathVariable String roomTypeId,
+      @RequestParam java.time.LocalDate from,
+      @RequestParam java.time.LocalDate to) {
+    return getRoomAvailabilityUseCase
+        .execute(
+            java.util.UUID.fromString(hotelId), java.util.UUID.fromString(roomTypeId), from, to)
+        .stream()
+        .map(RoomAvailabilityResponse::from)
+        .toList();
   }
 }
