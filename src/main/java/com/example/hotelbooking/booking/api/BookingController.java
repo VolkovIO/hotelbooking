@@ -2,6 +2,8 @@ package com.example.hotelbooking.booking.api;
 
 import com.example.hotelbooking.booking.application.command.CancelBookingCommand;
 import com.example.hotelbooking.booking.application.command.CancelBookingUseCase;
+import com.example.hotelbooking.booking.application.command.ConfirmBookingCommand;
+import com.example.hotelbooking.booking.application.command.ConfirmBookingUseCase;
 import com.example.hotelbooking.booking.application.command.CreateBookingCommand;
 import com.example.hotelbooking.booking.application.command.CreateBookingUseCase;
 import com.example.hotelbooking.booking.application.query.GetBookingByIdUseCase;
@@ -29,6 +31,7 @@ public class BookingController {
   private final CreateBookingUseCase createBookingUseCase;
   private final GetBookingByIdUseCase getBookingByIdUseCase;
   private final CancelBookingUseCase cancelBookingUseCase;
+  private final ConfirmBookingUseCase confirmBookingUseCase;
 
   @Operation(
       summary = "Create booking",
@@ -80,6 +83,21 @@ public class BookingController {
   public BookingResponse cancel(@PathVariable String bookingId) {
     Booking booking =
         cancelBookingUseCase.execute(new CancelBookingCommand(BookingId.from(bookingId)));
+    return BookingResponse.from(booking);
+  }
+
+  @Operation(
+      summary = "Confirm booking",
+      description =
+          """
+          Confirms a booking that is currently on hold.
+
+          The associated inventory hold is finalized before the booking is marked as confirmed.
+          """)
+  @PostMapping("/{bookingId}/confirm")
+  public BookingResponse confirm(@PathVariable String bookingId) {
+    Booking booking =
+        confirmBookingUseCase.execute(new ConfirmBookingCommand(BookingId.from(bookingId)));
     return BookingResponse.from(booking);
   }
 }
