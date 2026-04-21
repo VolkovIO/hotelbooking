@@ -4,6 +4,7 @@ import com.example.hotelbooking.booking.application.exception.BookingNotFoundExc
 import com.example.hotelbooking.booking.application.port.BookingRepository;
 import com.example.hotelbooking.booking.application.port.InventoryReservationPort;
 import com.example.hotelbooking.booking.domain.Booking;
+import com.example.hotelbooking.booking.domain.BookingDomainException;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -22,11 +23,13 @@ public class CancelBookingUseCase {
             .orElseThrow(() -> new BookingNotFoundException(command.bookingId()));
 
     UUID holdId = booking.getHoldId();
-    if (holdId != null) {
-      inventoryReservationPort.releaseHold(holdId);
+    if (holdId == null) {
+      throw new BookingDomainException("Booking has no active hold to cancel");
     }
 
-    booking.cancel();
+    inventoryReservationPort.releaseHold(holdId);
+    booking.cancelHeldBooking();
+
     return bookingRepository.save(booking);
   }
 }

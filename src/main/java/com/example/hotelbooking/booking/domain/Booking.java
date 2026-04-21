@@ -3,6 +3,7 @@ package com.example.hotelbooking.booking.domain;
 import java.util.Objects;
 import java.util.UUID;
 
+@SuppressWarnings("PMD.CyclomaticComplexity")
 public final class Booking {
 
   private final BookingId id;
@@ -44,9 +45,22 @@ public final class Booking {
     this.status = BookingStatus.ON_HOLD;
   }
 
-  public void confirm() {
-    ensureStatus(BookingStatus.ON_HOLD, "Only ON_HOLD booking can be confirmed");
+  @SuppressWarnings("PMD.NullAssignment")
+  public void confirmHeldBooking() {
+    if (status == BookingStatus.CONFIRMED) {
+      throw new BookingDomainException("Booking is already confirmed");
+    }
+
+    if (status == BookingStatus.CANCELLED) {
+      throw new BookingDomainException("Cancelled booking cannot be confirmed");
+    }
+
+    if (holdId == null) {
+      throw new BookingDomainException("Booking cannot be confirmed without an active hold");
+    }
+
     status = BookingStatus.CONFIRMED;
+    holdId = null;
   }
 
   public void reject() {
@@ -59,9 +73,23 @@ public final class Booking {
     status = BookingStatus.EXPIRED;
   }
 
-  public void cancel() {
-    ensureStatus(BookingStatus.ON_HOLD, "Only ON_HOLD booking can be cancelled");
+  @SuppressWarnings("PMD.NullAssignment")
+  public void cancelHeldBooking() {
+    if (status == BookingStatus.CANCELLED) {
+      throw new BookingDomainException("Booking is already cancelled");
+    }
+
+    if (status == BookingStatus.CONFIRMED) {
+      throw new BookingDomainException(
+          "Confirmed booking cannot be cancelled through hold cancellation flow");
+    }
+
+    if (holdId == null) {
+      throw new BookingDomainException("Booking has no active hold to release");
+    }
+
     status = BookingStatus.CANCELLED;
+    holdId = null;
   }
 
   public BookingId getId() {
