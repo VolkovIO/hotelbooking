@@ -10,7 +10,7 @@ public final class RoomAvailability {
   private final UUID hotelId;
   private final UUID roomTypeId;
   private final LocalDate date;
-  private final int totalRooms;
+  private int totalRooms;
   private final int heldRooms;
   private final int bookedRooms;
 
@@ -74,6 +74,18 @@ public final class RoomAvailability {
         totalRooms,
         heldRooms - normalizedRooms,
         bookedRooms + normalizedRooms);
+  }
+
+  public void adjustCapacity(int newTotalRooms) {
+    if (newTotalRooms <= 0) {
+      throw new InventoryDomainException("totalRooms must be positive");
+    }
+
+    if (newTotalRooms < heldRooms + bookedRooms) {
+      throw new InventoryDomainException("totalRooms cannot be lower than heldRooms + bookedRooms");
+    }
+
+    this.totalRooms = newTotalRooms;
   }
 
   public int availableRooms() {

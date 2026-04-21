@@ -66,4 +66,53 @@ class RoomAvailabilityTest {
         () -> availability.placeHold(3),
         "Placing hold beyond available rooms should throw InventoryDomainException");
   }
+
+  @Test
+  void shouldAdjustCapacityWhenNewTotalRoomsIsNotLowerThanOccupiedRooms() {
+    RoomAvailability availability =
+        RoomAvailability.create(
+                UUID.randomUUID(), UUID.randomUUID(), LocalDate.now().plusDays(1), 10)
+            .placeHold(2)
+            .confirmHold(1);
+    // now: total=10, held=1, booked=1
+
+    availability.adjustCapacity(5);
+
+    assertEquals(5, availability.getTotalRooms(), "totalRooms should be updated");
+    assertEquals(1, availability.getHeldRooms(), "heldRooms should remain unchanged");
+    assertEquals(1, availability.getBookedRooms(), "bookedRooms should remain unchanged");
+    assertEquals(3, availability.availableRooms(), "availableRooms should be recalculated");
+  }
+
+  @Test
+  void shouldThrowExceptionWhenAdjustingCapacityBelowHeldAndBookedRooms() {
+    RoomAvailability availability =
+        RoomAvailability.create(
+                UUID.randomUUID(), UUID.randomUUID(), LocalDate.now().plusDays(1), 10)
+            .placeHold(2)
+            .confirmHold(1);
+    // now: held=1, booked=1, occupied=2
+
+    assertThrows(
+        InventoryDomainException.class,
+        () -> availability.adjustCapacity(1),
+        "Adjusting capacity below held + booked rooms should throw InventoryDomainException");
+  }
+
+  @Test
+  void shouldAllowAdjustingCapacityToExactOccupiedRoomsCount() {
+    RoomAvailability availability =
+        RoomAvailability.create(
+                UUID.randomUUID(), UUID.randomUUID(), LocalDate.now().plusDays(1), 10)
+            .placeHold(3)
+            .confirmHold(2);
+    // held=1, booked=2, occupied=3
+
+    availability.adjustCapacity(3);
+
+    assertEquals(3, availability.getTotalRooms(), "totalRooms should be updated to occupied count");
+    assertEquals(1, availability.getHeldRooms(), "heldRooms should remain unchanged");
+    assertEquals(2, availability.getBookedRooms(), "bookedRooms should remain unchanged");
+    assertEquals(0, availability.availableRooms(), "availableRooms should become zero");
+  }
 }

@@ -5,6 +5,7 @@ import com.example.hotelbooking.inventory.domain.RoomAvailability;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.context.annotation.Profile;
@@ -34,6 +35,20 @@ public class InMemoryRoomAvailabilityRepository implements RoomAvailabilityRepos
         .filter(item -> !item.getDate().isBefore(from) && !item.getDate().isAfter(to))
         .sorted((a, b) -> a.getDate().compareTo(b.getDate()))
         .toList();
+  }
+
+  @Override
+  public Optional<RoomAvailability> findByHotelIdAndRoomTypeIdAndDate(
+      UUID hotelId, UUID roomTypeId, LocalDate date) {
+    return Optional.ofNullable(storage.get(keyOf(hotelId, roomTypeId, date)));
+  }
+
+  @Override
+  public RoomAvailability save(RoomAvailability availability) {
+    storage.put(
+        keyOf(availability.getHotelId(), availability.getRoomTypeId(), availability.getDate()),
+        availability);
+    return availability;
   }
 
   private String keyOf(UUID hotelId, UUID roomTypeId, LocalDate date) {
