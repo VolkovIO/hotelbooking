@@ -3,7 +3,6 @@ package com.example.hotelbooking.common.api;
 import com.example.hotelbooking.booking.application.exception.BookingNotFoundException;
 import com.example.hotelbooking.booking.application.exception.HotelReferenceNotFoundException;
 import com.example.hotelbooking.booking.application.exception.RoomHoldFailedException;
-import com.example.hotelbooking.booking.application.exception.RoomTypeNotAvailableException;
 import com.example.hotelbooking.booking.application.exception.RoomTypeReferenceNotFoundException;
 import com.example.hotelbooking.booking.domain.BookingDomainException;
 import com.example.hotelbooking.inventory.application.exception.HotelNotFoundException;
@@ -106,14 +105,6 @@ public class GlobalExceptionHandler {
       RoomTypeReferenceNotFoundException exception, HttpServletRequest request) {
     return ApiErrorResponse.of(
         "ROOM_TYPE_REFERENCE_NOT_FOUND", exception.getMessage(), request.getRequestURI());
-  }
-
-  @ExceptionHandler(RoomTypeNotAvailableException.class)
-  @ResponseStatus(HttpStatus.CONFLICT)
-  public ApiErrorResponse handleRoomTypeNotAvailableException(
-      RoomTypeNotAvailableException exception, HttpServletRequest request) {
-    return ApiErrorResponse.of(
-        "ROOM_TYPE_NOT_AVAILABLE", exception.getMessage(), request.getRequestURI());
   }
 
   @ExceptionHandler(RoomHoldFailedException.class)
