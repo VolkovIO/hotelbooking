@@ -4,6 +4,7 @@ import java.time.LocalDate;
 import java.util.Objects;
 import java.util.UUID;
 
+@SuppressWarnings("PMD.CyclomaticComplexity")
 public final class RoomAvailability {
 
   private final UUID hotelId;
