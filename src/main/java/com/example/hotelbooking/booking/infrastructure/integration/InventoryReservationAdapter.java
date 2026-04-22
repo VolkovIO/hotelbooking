@@ -1,5 +1,6 @@
 package com.example.hotelbooking.booking.infrastructure.integration;
 
+import com.example.hotelbooking.booking.application.exception.RoomHoldFailedException;
 import com.example.hotelbooking.booking.application.port.InventoryReservationPort;
 import com.example.hotelbooking.inventory.application.command.ConfirmRoomHoldUseCase;
 import com.example.hotelbooking.inventory.application.command.ReleaseRoomHoldUseCase;
@@ -27,31 +28,38 @@ public class InventoryReservationAdapter implements InventoryReservationPort {
   @Override
   public UUID placeHold(
       UUID hotelId, UUID roomTypeId, LocalDate checkIn, LocalDate checkOut, int rooms) {
-    LocalDate availabilityTo = checkOut.minusDays(1);
+    try {
+      LocalDate availabilityTo = checkOut.minusDays(1);
 
-    if (availabilityTo.isBefore(checkIn)) {
-      throw new InventoryDomainException("Invalid hold period");
+      if (availabilityTo.isBefore(checkIn)) {
+        throw new InventoryDomainException("Invalid hold period");
+      }
+
+      long requiredDays = ChronoUnit.DAYS.between(checkIn, checkOut);
+
+      List<RoomAvailability> availabilityList =
+          roomAvailabilityRepository.findByRoomTypeAndDateRange(
+              hotelId, roomTypeId, checkIn, availabilityTo);
+
+      if (availabilityList.size() != requiredDays) {
+        throw new InventoryDomainException(
+            "Availability is not configured for the full stay period");
+      }
+
+      List<RoomAvailability> updatedAvailability =
+          availabilityList.stream().map(item -> item.placeHold(rooms)).toList();
+
+      roomAvailabilityRepository.saveAll(updatedAvailability);
+
+      RoomHold roomHold = RoomHold.create(hotelId, roomTypeId, checkIn, checkOut, rooms);
+      roomHoldRepository.save(roomHold);
+
+      return roomHold.getId();
+    } catch (InventoryDomainException exception) {
+      throw new RoomHoldFailedException(
+          "Failed to place room hold for hotel %s and room type %s".formatted(hotelId, roomTypeId),
+          exception);
     }
-
-    long requiredDays = ChronoUnit.DAYS.between(checkIn, checkOut);
-
-    List<RoomAvailability> availabilityList =
-        roomAvailabilityRepository.findByRoomTypeAndDateRange(
-            hotelId, roomTypeId, checkIn, availabilityTo);
-
-    if (availabilityList.size() != requiredDays) {
-      throw new InventoryDomainException("Availability is not configured for the full stay period");
-    }
-
-    List<RoomAvailability> updatedAvailability =
-        availabilityList.stream().map(item -> item.placeHold(rooms)).toList();
-
-    roomAvailabilityRepository.saveAll(updatedAvailability);
-
-    RoomHold roomHold = RoomHold.create(hotelId, roomTypeId, checkIn, checkOut, rooms);
-    roomHoldRepository.save(roomHold);
-
-    return roomHold.getId();
   }
 
   @Override
