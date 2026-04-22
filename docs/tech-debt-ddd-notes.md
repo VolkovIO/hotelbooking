@@ -2,6 +2,7 @@
 
 Project: hotelbooking  
 Current baseline: v0.1.0  
+Updated after: module boundary cleanup and availability flow refactoring  
 Started: 2026-04-20
 
 Purpose: keep track of known design issues, deferred improvements, and architecture decisions while the domain model is still evolving.
@@ -15,61 +16,6 @@ How to use this file:
 ---
 
 ## Active
-
-### Domain model consistency
-
-- [ ] Clear `holdId` after booking confirmation and cancellation
-  - Area: booking domain
-  - Why: avoid stale hold reference in aggregate state
-  - Target version: TBD
-  - Notes: current behavior is acceptable for learning phase, but should be fixed before production-like persistence
-
-- [ ] Revisit booking confirm/cancel flow
-  - Area: booking + inventory interaction
-  - Why: state transitions should stay explicit and consistent
-  - Target version: TBD
-  - Notes: domain transition should better reflect final aggregate state
-
-- [ ] Replace generic state failures with domain-specific exceptions
-  - Area: application / domain
-  - Why: avoid leaking technical exceptions such as `IllegalStateException` into API behavior
-  - Target version: TBD
-
-### Availability model
-
-- [ ] Prevent configured availability from overwriting held/booked state
-  - Area: inventory domain
-  - Why: current availability setup may erase already tracked reservation state
-  - Target version: TBD
-  - Priority: high
-
-- [ ] Validate capacity reduction against held/booked rooms
-  - Area: inventory domain
-  - Why: total capacity should not become lower than already reserved capacity
-  - Target version: TBD
-
-- [ ] Separate "configure availability" from "adjust capacity"
-  - Area: inventory application / domain
-  - Why: these are different business operations and should not share one ambiguous flow
-  - Target version: TBD
-
-### Module boundaries
-
-- [ ] Remove `inventory.domain` leakage into `booking.application`
-  - Area: module boundaries
-  - Why: bounded contexts should communicate through ports/contracts, not foreign domain exceptions
-  - Target version: TBD
-
-- [ ] Hide internal classes where possible
-  - Area: package design
-  - Why: reduce accidental coupling inside the modular monolith
-  - Target version: TBD
-
-- [ ] Add architecture boundary checks
-  - Area: test architecture
-  - Why: protect package/module rules over time
-  - Options: ArchUnit or future multi-module Gradle setup
-  - Target version: TBD
 
 ### Persistence preparation
 
@@ -85,6 +31,12 @@ How to use this file:
 - [ ] Define Mongo persistence strategy for `inventory`
   - Area: infrastructure.persistence.mongo
   - Why: inventory model includes availability, holds, and booked state that need careful document design
+  - Target version: TBD
+
+- [ ] Add architecture boundary checks
+  - Area: test architecture
+  - Why: protect package/module rules over time
+  - Options: ArchUnit or future multi-module Gradle setup
   - Target version: TBD
 
 ---
@@ -128,23 +80,79 @@ How to use this file:
 
 ## Completed
 
-<!-- Example:
-- [x] Added Mongo persistence adapter for booking
-  - Fixed in: v0.2.0
-  - Commit: abc1234
-  - Notes: introduced BookingDocument and mapper
--->
+- [x] Clear `holdId` after booking confirmation and cancellation
+  - Fixed in: v0.1.0
+  - Notes:
+    - introduced held-booking-specific transitions
+    - `holdId` is cleared as part of the aggregate state transition
+    - removed old ambiguous confirm/cancel path from `Booking`
+
+- [x] Revisit booking confirm/cancel flow
+  - Fixed in: v0.1.0
+  - Notes:
+    - introduced `confirmHeldBooking()` and `cancelHeldBooking()`
+    - booking state transition is now explicit and aligned with active hold lifecycle
+
+- [x] Replace generic state failures with domain-specific exceptions
+  - Fixed in: v0.1.0
+  - Notes:
+    - booking state transition checks now use domain exceptions instead of generic state failures
+    - this keeps invalid transitions inside domain language
+
+- [x] Prevent configured availability from overwriting held/booked state
+  - Fixed in: v0.1.0
+  - Notes:
+    - removed the old single flow that recreated availability records
+    - existing availability is now adjusted instead of silently reset
+
+- [x] Validate capacity reduction against held/booked rooms
+  - Fixed in: v0.1.0
+  - Notes:
+    - added domain validation in `RoomAvailability.adjustCapacity(...)`
+    - total rooms cannot be set below already occupied capacity
+
+- [x] Separate "configure availability" from "adjust capacity"
+  - Fixed in: v0.1.0
+  - Notes:
+    - split old `SetRoomAvailabilityUseCase`
+    - introduced:
+      - `InitializeRoomAvailabilityUseCase`
+      - `AdjustRoomCapacityUseCase`
+    - controller endpoints were aligned with the new scenarios
+
+- [x] Remove unused room availability lookup
+  - Fixed in: v0.1.0
+  - Notes:
+    - removed unused `InventoryLookupPort.isRoomTypeAvailable()`
+    - removed dead availability check path instead of keeping misleading pre-check logic
+
+- [x] Remove `inventory.domain` leakage into `booking.application`
+  - Fixed in: v0.1.0
+  - Notes:
+    - removed direct dependency from booking application layer to inventory domain exceptions
+    - moved exception translation to the integration adapter / port boundary
+    - bounded context interaction now goes through port-level contracts
+
+- [x] Hide internal classes where possible
+  - Fixed in: v0.1.0
+  - Notes:
+    - made internal infrastructure implementations package-private where practical
+    - reduced accidental exposure of in-memory repositories and internal adapters
 
 ---
 
 ## Review points per version
 
-### Planned for v0.1.x
-- stabilize domain flows
-- keep technical debt visible
-- avoid premature infrastructure overengineering
+### Completed in v0.1.0
+- booking hold lifecycle cleanup
+- clearer booking state transitions
+- availability initialization vs capacity adjustment split
+- capacity validation against occupied rooms
+- removal of unused availability pre-check logic
+- reduced cross-context leakage between booking and inventory
+- reduced visibility of internal infrastructure implementations
 
 ### Planned for next milestone
 - add Mongo persistence
 - revisit transactional boundaries
-- tighten module boundaries after core model is stable
+- tighten architectural protection with automated boundary checks
