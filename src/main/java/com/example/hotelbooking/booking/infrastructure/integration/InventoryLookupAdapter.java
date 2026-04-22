@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class InventoryLookupAdapter implements InventoryLookupPort {
+final class InventoryLookupAdapter implements InventoryLookupPort {
 
   private final HotelRepository hotelRepository;
 

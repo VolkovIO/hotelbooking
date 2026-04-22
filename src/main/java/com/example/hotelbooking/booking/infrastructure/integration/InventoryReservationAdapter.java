@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-public class InventoryReservationAdapter implements InventoryReservationPort {
+final class InventoryReservationAdapter implements InventoryReservationPort {
 
   private final RoomAvailabilityRepository roomAvailabilityRepository;
   private final RoomHoldRepository roomHoldRepository;
