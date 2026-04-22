@@ -2,16 +2,20 @@ package com.example.hotelbooking.inventory.api;
 
 import com.example.hotelbooking.inventory.application.command.AddRoomTypeCommand;
 import com.example.hotelbooking.inventory.application.command.AddRoomTypeUseCase;
+import com.example.hotelbooking.inventory.application.command.AdjustRoomCapacityUseCase;
+import com.example.hotelbooking.inventory.application.command.InitializeRoomAvailabilityUseCase;
 import com.example.hotelbooking.inventory.application.command.RegisterHotelCommand;
 import com.example.hotelbooking.inventory.application.command.RegisterHotelUseCase;
-import com.example.hotelbooking.inventory.application.command.SetRoomAvailabilityCommand;
-import com.example.hotelbooking.inventory.application.command.SetRoomAvailabilityUseCase;
+import com.example.hotelbooking.inventory.application.command.RoomAvailabilityPeriodCommand;
 import com.example.hotelbooking.inventory.application.query.GetHotelByIdUseCase;
 import com.example.hotelbooking.inventory.application.query.GetRoomAvailabilityUseCase;
 import com.example.hotelbooking.inventory.domain.Hotel;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.time.LocalDate;
+import java.util.List;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -33,7 +37,8 @@ public class InventoryController {
   private final RegisterHotelUseCase registerHotelUseCase;
   private final AddRoomTypeUseCase addRoomTypeUseCase;
   private final GetHotelByIdUseCase getHotelByIdUseCase;
-  private final SetRoomAvailabilityUseCase setRoomAvailabilityUseCase;
+  private final InitializeRoomAvailabilityUseCase initializeRoomAvailabilityUseCase;
+  private final AdjustRoomCapacityUseCase adjustRoomCapacityUseCase;
   private final GetRoomAvailabilityUseCase getRoomAvailabilityUseCase;
 
   @Operation(
@@ -67,7 +72,7 @@ public class InventoryController {
     Hotel hotel =
         addRoomTypeUseCase.execute(
             new AddRoomTypeCommand(
-                java.util.UUID.fromString(hotelId), request.name(), request.guestCapacity()));
+                UUID.fromString(hotelId), request.name(), request.guestCapacity()));
 
     return HotelResponse.from(hotel);
   }
@@ -82,28 +87,53 @@ public class InventoryController {
           """)
   @GetMapping("/{hotelId}")
   public HotelResponse getHotelById(@PathVariable String hotelId) {
-    Hotel hotel = getHotelByIdUseCase.execute(java.util.UUID.fromString(hotelId));
+    Hotel hotel = getHotelByIdUseCase.execute(UUID.fromString(hotelId));
     return HotelResponse.from(hotel);
   }
 
   @Operation(
-      summary = "Set room availability",
+      summary = "Initialize room availability",
       description =
           """
-          Sets daily room availability for the specified hotel and room type within the given date range.
+          Initializes daily room availability for the specified hotel and room type within the given date range.
 
-          The range is inclusive on both ends.
+          This operation is intended for dates where availability does not yet exist.
+          If availability already exists for any date in the range, the API should reject the request.
           """)
-  @PutMapping("/{hotelId}/room-types/{roomTypeId}/availability")
-  @ResponseStatus(HttpStatus.OK)
-  public void setRoomAvailability(
+  @PostMapping("/{hotelId}/room-types/{roomTypeId}/availability/initialization")
+  @ResponseStatus(HttpStatus.CREATED)
+  public void initializeRoomAvailability(
       @PathVariable String hotelId,
       @PathVariable String roomTypeId,
       @Valid @RequestBody SetRoomAvailabilityRequest request) {
-    setRoomAvailabilityUseCase.execute(
-        new SetRoomAvailabilityCommand(
-            java.util.UUID.fromString(hotelId),
-            java.util.UUID.fromString(roomTypeId),
+    initializeRoomAvailabilityUseCase.execute(
+        new RoomAvailabilityPeriodCommand(
+            UUID.fromString(hotelId),
+            UUID.fromString(roomTypeId),
+            request.from(),
+            request.to(),
+            request.totalRooms()));
+  }
+
+  @Operation(
+      summary = "Adjust room capacity",
+      description =
+          """
+          Adjusts total room capacity for existing daily availability records within the given date range.
+
+          This operation keeps existing held and booked rooms unchanged.
+          If availability does not exist for any date in the range, the API should reject the request.
+          """)
+  @PutMapping("/{hotelId}/room-types/{roomTypeId}/availability/capacity")
+  @ResponseStatus(HttpStatus.OK)
+  public void adjustRoomCapacity(
+      @PathVariable String hotelId,
+      @PathVariable String roomTypeId,
+      @Valid @RequestBody SetRoomAvailabilityRequest request) {
+    adjustRoomCapacityUseCase.execute(
+        new RoomAvailabilityPeriodCommand(
+            UUID.fromString(hotelId),
+            UUID.fromString(roomTypeId),
             request.from(),
             request.to(),
             request.totalRooms()));
@@ -116,14 +146,13 @@ public class InventoryController {
           Returns daily room availability for the specified hotel, room type, and date range.
           """)
   @GetMapping("/{hotelId}/room-types/{roomTypeId}/availability")
-  public java.util.List<RoomAvailabilityResponse> getRoomAvailability(
+  public List<RoomAvailabilityResponse> getRoomAvailability(
       @PathVariable String hotelId,
       @PathVariable String roomTypeId,
-      @RequestParam java.time.LocalDate from,
-      @RequestParam java.time.LocalDate to) {
+      @RequestParam LocalDate from,
+      @RequestParam LocalDate to) {
     return getRoomAvailabilityUseCase
-        .execute(
-            java.util.UUID.fromString(hotelId), java.util.UUID.fromString(roomTypeId), from, to)
+        .execute(UUID.fromString(hotelId), UUID.fromString(roomTypeId), from, to)
         .stream()
         .map(RoomAvailabilityResponse::from)
         .toList();

@@ -23,7 +23,6 @@ import org.springframework.test.web.servlet.MvcResult;
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("in-memory")
-@SuppressWarnings("PMD.UnitTestContainsTooManyAsserts")
 class BookingControllerIntegrationTest {
 
   @Autowired private MockMvc mockMvc;

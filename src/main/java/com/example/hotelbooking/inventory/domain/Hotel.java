@@ -35,6 +35,16 @@ public final class Hotel {
     roomTypes.add(RoomType.create(name, guestCapacity));
   }
 
+  public void requireRoomType(UUID roomTypeId) {
+    Objects.requireNonNull(roomTypeId, "roomTypeId must not be null");
+
+    boolean exists = roomTypes.stream().anyMatch(roomType -> roomType.getId().equals(roomTypeId));
+    if (!exists) {
+      throw new InventoryDomainException(
+          "Room type %s does not belong to hotel %s".formatted(roomTypeId, id));
+    }
+  }
+
   public UUID getId() {
     return id;
   }

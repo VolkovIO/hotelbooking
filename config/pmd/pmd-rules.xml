@@ -13,6 +13,8 @@
     <!-- GuardLogStatement is excluded: the project uses SLF4J parameterized logging,
          and explicit level guards are only expected for expensive log argument evaluation. -->
     <exclude name="GuardLogStatement"/>
+    <exclude name="UnitTestAssertionsShouldIncludeMessage" />
+    <exclude name="UnitTestContainsTooManyAsserts" />
   </rule>
 
   <!-- Common error-prone patterns -->
@@ -22,8 +24,8 @@
   <rule ref="category/java/design.xml/CyclomaticComplexity">
     <properties>
       <property name="methodReportLevel" value="20"/>
-<!--      <property name="classReportLevel" value="20"/>-->
-      <property name="classReportLevel" value="30" />
+      <property name="classReportLevel" value="20"/>
+<!--      <property name="classReportLevel" value="30" />-->
     </properties>
   </rule>
 

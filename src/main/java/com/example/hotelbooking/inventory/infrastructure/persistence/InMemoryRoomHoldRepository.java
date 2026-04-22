@@ -11,7 +11,7 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 @Profile("in-memory")
-public class InMemoryRoomHoldRepository implements RoomHoldRepository {
+final class InMemoryRoomHoldRepository implements RoomHoldRepository {
 
   private final Map<UUID, RoomHold> storage = new ConcurrentHashMap<>();
 
