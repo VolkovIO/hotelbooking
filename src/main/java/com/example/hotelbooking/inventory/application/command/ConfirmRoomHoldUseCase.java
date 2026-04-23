@@ -30,7 +30,7 @@ public class ConfirmRoomHoldUseCase {
             roomHold.getHotelId(),
             roomHold.getRoomTypeId(),
             roomHold.getCheckIn(),
-            roomHold.getCheckOut());
+            roomHold.getCheckOut().minusDays(1));
 
     validateCompleteAvailabilityRange(roomHold, availabilityList);
 
