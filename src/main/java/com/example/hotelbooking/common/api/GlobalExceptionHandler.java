@@ -7,6 +7,9 @@ import com.example.hotelbooking.booking.application.exception.RoomHoldFailedExce
 import com.example.hotelbooking.booking.application.exception.RoomTypeReferenceNotFoundException;
 import com.example.hotelbooking.booking.domain.BookingDomainException;
 import com.example.hotelbooking.inventory.application.exception.HotelNotFoundException;
+import com.example.hotelbooking.inventory.application.exception.RoomAvailabilityAlreadyExistsException;
+import com.example.hotelbooking.inventory.application.exception.RoomAvailabilityNotFoundException;
+import com.example.hotelbooking.inventory.application.exception.RoomHoldAvailabilityIncompleteException;
 import com.example.hotelbooking.inventory.application.exception.RoomHoldNotFoundException;
 import com.example.hotelbooking.inventory.domain.InventoryDomainException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -129,5 +132,29 @@ public class GlobalExceptionHandler {
       GuestCountExceedsRoomCapacityException exception, HttpServletRequest request) {
     return ApiErrorResponse.of(
         "GUEST_COUNT_EXCEEDS_ROOM_CAPACITY", exception.getMessage(), request.getRequestURI());
+  }
+
+  @ExceptionHandler(RoomAvailabilityAlreadyExistsException.class)
+  @ResponseStatus(HttpStatus.CONFLICT)
+  public ApiErrorResponse handleRoomAvailabilityAlreadyExistsException(
+      RoomAvailabilityAlreadyExistsException exception, HttpServletRequest request) {
+    return ApiErrorResponse.of(
+        "ROOM_AVAILABILITY_ALREADY_EXISTS", exception.getMessage(), request.getRequestURI());
+  }
+
+  @ExceptionHandler(RoomAvailabilityNotFoundException.class)
+  @ResponseStatus(HttpStatus.NOT_FOUND)
+  public ApiErrorResponse handleRoomAvailabilityNotFoundException(
+      RoomAvailabilityNotFoundException exception, HttpServletRequest request) {
+    return ApiErrorResponse.of(
+        "ROOM_AVAILABILITY_NOT_FOUND", exception.getMessage(), request.getRequestURI());
+  }
+
+  @ExceptionHandler(RoomHoldAvailabilityIncompleteException.class)
+  @ResponseStatus(HttpStatus.CONFLICT)
+  public ApiErrorResponse handleRoomHoldAvailabilityIncompleteException(
+      RoomHoldAvailabilityIncompleteException exception, HttpServletRequest request) {
+    return ApiErrorResponse.of(
+        "ROOM_HOLD_AVAILABILITY_INCOMPLETE", exception.getMessage(), request.getRequestURI());
   }
 }
