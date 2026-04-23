@@ -2,8 +2,10 @@ package com.example.hotelbooking.booking.domain;
 
 import java.util.Objects;
 import java.util.UUID;
+import lombok.Getter;
 
-@SuppressWarnings("PMD.CyclomaticComplexity")
+@Getter
+@SuppressWarnings({"PMD.CyclomaticComplexity", "PMD.NullAssignment"})
 public final class Booking {
 
   private final BookingId id;
@@ -45,79 +47,36 @@ public final class Booking {
     this.status = BookingStatus.ON_HOLD;
   }
 
-  @SuppressWarnings("PMD.NullAssignment")
   public void confirmHeldBooking() {
-    if (status == BookingStatus.CONFIRMED) {
-      throw new BookingDomainException("Booking is already confirmed");
-    }
+    ensureStatus(BookingStatus.ON_HOLD, "Only ON_HOLD booking can be confirmed");
+    ensureHoldPresent("Booking cannot be confirmed without an active hold");
 
-    if (status == BookingStatus.CANCELLED) {
-      throw new BookingDomainException("Cancelled booking cannot be confirmed");
-    }
-
-    if (holdId == null) {
-      throw new BookingDomainException("Booking cannot be confirmed without an active hold");
-    }
-
-    status = BookingStatus.CONFIRMED;
-    holdId = null;
+    this.status = BookingStatus.CONFIRMED;
+    this.holdId = null;
   }
 
   public void reject() {
-    ensureNotFinal("Rejected status cannot be applied to a final booking");
-    status = BookingStatus.REJECTED;
+    ensureStatusOneOf(
+        BookingStatus.NEW, BookingStatus.ON_HOLD, "Only NEW or ON_HOLD booking can be rejected");
+
+    this.status = BookingStatus.REJECTED;
+    this.holdId = null;
   }
 
   public void expire() {
-    ensureNotFinal("Expired status cannot be applied to a final booking");
-    status = BookingStatus.EXPIRED;
+    ensureStatusOneOf(
+        BookingStatus.NEW, BookingStatus.ON_HOLD, "Only NEW or ON_HOLD booking can be expired");
+
+    this.status = BookingStatus.EXPIRED;
+    this.holdId = null;
   }
 
-  @SuppressWarnings("PMD.NullAssignment")
   public void cancelHeldBooking() {
-    if (status == BookingStatus.CANCELLED) {
-      throw new BookingDomainException("Booking is already cancelled");
-    }
+    ensureStatus(BookingStatus.ON_HOLD, "Only ON_HOLD booking can be cancelled");
+    ensureHoldPresent("Booking has no active hold to release");
 
-    if (status == BookingStatus.CONFIRMED) {
-      throw new BookingDomainException(
-          "Confirmed booking cannot be cancelled through hold cancellation flow");
-    }
-
-    if (holdId == null) {
-      throw new BookingDomainException("Booking has no active hold to release");
-    }
-
-    status = BookingStatus.CANCELLED;
-    holdId = null;
-  }
-
-  public BookingId getId() {
-    return id;
-  }
-
-  public UUID getHotelId() {
-    return hotelId;
-  }
-
-  public UUID getRoomTypeId() {
-    return roomTypeId;
-  }
-
-  public StayPeriod getStayPeriod() {
-    return stayPeriod;
-  }
-
-  public int getGuestCount() {
-    return guestCount;
-  }
-
-  public BookingStatus getStatus() {
-    return status;
-  }
-
-  public UUID getHoldId() {
-    return holdId;
+    this.status = BookingStatus.CANCELLED;
+    this.holdId = null;
   }
 
   private static int requirePositive(int value, String message) {
@@ -133,11 +92,14 @@ public final class Booking {
     }
   }
 
-  private void ensureNotFinal(String message) {
-    if (status == BookingStatus.CONFIRMED
-        || status == BookingStatus.REJECTED
-        || status == BookingStatus.EXPIRED
-        || status == BookingStatus.CANCELLED) {
+  private void ensureStatusOneOf(BookingStatus first, BookingStatus second, String message) {
+    if (status != first && status != second) {
+      throw new BookingDomainException(message);
+    }
+  }
+
+  private void ensureHoldPresent(String message) {
+    if (holdId == null) {
       throw new BookingDomainException(message);
     }
   }
