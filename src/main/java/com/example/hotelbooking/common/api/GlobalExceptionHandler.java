@@ -1,6 +1,7 @@
 package com.example.hotelbooking.common.api;
 
 import com.example.hotelbooking.booking.application.exception.BookingNotFoundException;
+import com.example.hotelbooking.booking.application.exception.GuestCountExceedsRoomCapacityException;
 import com.example.hotelbooking.booking.application.exception.HotelReferenceNotFoundException;
 import com.example.hotelbooking.booking.application.exception.RoomHoldFailedException;
 import com.example.hotelbooking.booking.application.exception.RoomTypeReferenceNotFoundException;
@@ -120,5 +121,13 @@ public class GlobalExceptionHandler {
       RoomHoldNotFoundException exception, HttpServletRequest request) {
     return ApiErrorResponse.of(
         "ROOM_HOLD_NOT_FOUND", exception.getMessage(), request.getRequestURI());
+  }
+
+  @ExceptionHandler(GuestCountExceedsRoomCapacityException.class)
+  @ResponseStatus(HttpStatus.CONFLICT)
+  public ApiErrorResponse handleGuestCountExceedsRoomCapacityException(
+      GuestCountExceedsRoomCapacityException exception, HttpServletRequest request) {
+    return ApiErrorResponse.of(
+        "GUEST_COUNT_EXCEEDS_ROOM_CAPACITY", exception.getMessage(), request.getRequestURI());
   }
 }
