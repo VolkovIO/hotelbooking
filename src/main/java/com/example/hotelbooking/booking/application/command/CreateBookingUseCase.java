@@ -1,5 +1,6 @@
 package com.example.hotelbooking.booking.application.command;
 
+import com.example.hotelbooking.booking.application.exception.GuestCountExceedsRoomCapacityException;
 import com.example.hotelbooking.booking.application.exception.HotelReferenceNotFoundException;
 import com.example.hotelbooking.booking.application.exception.RoomTypeReferenceNotFoundException;
 import com.example.hotelbooking.booking.application.port.BookingRepository;
@@ -26,6 +27,18 @@ public class CreateBookingUseCase {
 
     if (!inventoryLookupPort.roomTypeExists(command.hotelId(), command.roomTypeId())) {
       throw new RoomTypeReferenceNotFoundException(command.hotelId(), command.roomTypeId());
+    }
+
+    int guestCapacity =
+        inventoryLookupPort
+            .findRoomTypeGuestCapacity(command.hotelId(), command.roomTypeId())
+            .orElseThrow(
+                () ->
+                    new RoomTypeReferenceNotFoundException(
+                        command.hotelId(), command.roomTypeId()));
+
+    if (command.guestCount() > guestCapacity) {
+      throw new GuestCountExceedsRoomCapacityException(command.guestCount(), guestCapacity);
     }
 
     UUID holdId =

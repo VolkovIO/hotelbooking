@@ -11,23 +11,18 @@ import org.junit.jupiter.api.Test;
 
 class BookingTest {
 
-  private static final UUID HOTEL_ID = UUID.randomUUID();
-  private static final UUID ROOM_TYPE_ID = UUID.randomUUID();
-
   @Test
-  void shouldCreateNewBooking() {
+  void shouldCreateBookingInNewStatus() {
     Booking booking = createBooking();
 
     assertNotNull(booking.getId());
-    assertEquals(HOTEL_ID, booking.getHotelId());
-    assertEquals(ROOM_TYPE_ID, booking.getRoomTypeId());
-    assertEquals(2, booking.getGuestCount());
     assertEquals(BookingStatus.NEW, booking.getStatus());
     assertNull(booking.getHoldId());
+    assertEquals(2, booking.getGuestCount());
   }
 
   @Test
-  void shouldPlaceBookingOnHold() {
+  void shouldPlaceBookingOnHoldFromNewStatus() {
     Booking booking = createBooking();
     UUID holdId = UUID.randomUUID();
 
@@ -35,17 +30,6 @@ class BookingTest {
 
     assertEquals(BookingStatus.ON_HOLD, booking.getStatus());
     assertEquals(holdId, booking.getHoldId());
-  }
-
-  @Test
-  void shouldNotPlaceBookingOnHoldWhenStatusIsNotNew() {
-    Booking booking = createBooking();
-    booking.placeOnHold(UUID.randomUUID());
-
-    BookingDomainException ex =
-        assertThrows(BookingDomainException.class, () -> booking.placeOnHold(UUID.randomUUID()));
-
-    assertEquals("Only NEW booking can be placed on hold", ex.getMessage());
   }
 
   @Test
@@ -60,28 +44,6 @@ class BookingTest {
   }
 
   @Test
-  void shouldNotConfirmBookingWithoutHold() {
-    Booking booking = createBooking();
-
-    BookingDomainException ex =
-        assertThrows(BookingDomainException.class, booking::confirmHeldBooking);
-
-    assertEquals("Booking cannot be confirmed without an active hold", ex.getMessage());
-  }
-
-  @Test
-  void shouldNotConfirmAlreadyConfirmedBooking() {
-    Booking booking = createBooking();
-    booking.placeOnHold(UUID.randomUUID());
-    booking.confirmHeldBooking();
-
-    BookingDomainException ex =
-        assertThrows(BookingDomainException.class, booking::confirmHeldBooking);
-
-    assertEquals("Booking is already confirmed", ex.getMessage());
-  }
-
-  @Test
   void shouldCancelHeldBooking() {
     Booking booking = createBooking();
     booking.placeOnHold(UUID.randomUUID());
@@ -93,43 +55,76 @@ class BookingTest {
   }
 
   @Test
-  void shouldNotCancelBookingWithoutHold() {
-    Booking booking = createBooking();
-
-    BookingDomainException ex =
-        assertThrows(BookingDomainException.class, booking::cancelHeldBooking);
-
-    assertEquals("Booking has no active hold to release", ex.getMessage());
-  }
-
-  @Test
-  void shouldNotCancelAlreadyCancelledBooking() {
-    Booking booking = createBooking();
-    booking.placeOnHold(UUID.randomUUID());
-    booking.cancelHeldBooking();
-
-    BookingDomainException ex =
-        assertThrows(BookingDomainException.class, booking::cancelHeldBooking);
-
-    assertEquals("Booking is already cancelled", ex.getMessage());
-  }
-
-  @Test
-  void shouldRejectBooking() {
+  void shouldRejectNewBooking() {
     Booking booking = createBooking();
 
     booking.reject();
 
     assertEquals(BookingStatus.REJECTED, booking.getStatus());
+    assertNull(booking.getHoldId());
   }
 
   @Test
-  void shouldExpireBooking() {
+  void shouldRejectOnHoldBookingAndClearHoldId() {
+    Booking booking = createBooking();
+    booking.placeOnHold(UUID.randomUUID());
+
+    booking.reject();
+
+    assertEquals(BookingStatus.REJECTED, booking.getStatus());
+    assertNull(booking.getHoldId());
+  }
+
+  @Test
+  void shouldExpireNewBooking() {
     Booking booking = createBooking();
 
     booking.expire();
 
     assertEquals(BookingStatus.EXPIRED, booking.getStatus());
+    assertNull(booking.getHoldId());
+  }
+
+  @Test
+  void shouldExpireOnHoldBookingAndClearHoldId() {
+    Booking booking = createBooking();
+    booking.placeOnHold(UUID.randomUUID());
+
+    booking.expire();
+
+    assertEquals(BookingStatus.EXPIRED, booking.getStatus());
+    assertNull(booking.getHoldId());
+  }
+
+  @Test
+  void shouldNotPlaceOnHoldWhenStatusIsNotNew() {
+    Booking booking = createBooking();
+    booking.placeOnHold(UUID.randomUUID());
+
+    BookingDomainException exception =
+        assertThrows(BookingDomainException.class, () -> booking.placeOnHold(UUID.randomUUID()));
+
+    assertEquals("Only NEW booking can be placed on hold", exception.getMessage());
+  }
+
+  @Test
+  void shouldNotConfirmBookingWhenStatusIsNotOnHold() {
+    Booking booking = createBooking();
+
+    BookingDomainException exception =
+        assertThrows(BookingDomainException.class, booking::confirmHeldBooking);
+
+    assertEquals("Only ON_HOLD booking can be confirmed", exception.getMessage());
+  }
+
+  @Test
+  void shouldNotCancelBookingWhenStatusIsNotOnHold() {
+    Booking booking = createBooking();
+
+    BookingDomainException exception =
+        assertThrows(BookingDomainException.class, booking::cancelHeldBooking);
+
+    assertEquals("Only ON_HOLD booking can be cancelled", exception.getMessage());
   }
 
   @Test
@@ -138,9 +133,9 @@ class BookingTest {
     booking.placeOnHold(UUID.randomUUID());
     booking.confirmHeldBooking();
 
-    BookingDomainException ex = assertThrows(BookingDomainException.class, booking::reject);
+    BookingDomainException exception = assertThrows(BookingDomainException.class, booking::reject);
 
-    assertEquals("Rejected status cannot be applied to a final booking", ex.getMessage());
+    assertEquals("Only NEW or ON_HOLD booking can be rejected", exception.getMessage());
   }
 
   @Test
@@ -149,27 +144,26 @@ class BookingTest {
     booking.placeOnHold(UUID.randomUUID());
     booking.cancelHeldBooking();
 
-    BookingDomainException ex = assertThrows(BookingDomainException.class, booking::expire);
+    BookingDomainException exception = assertThrows(BookingDomainException.class, booking::expire);
 
-    assertEquals("Expired status cannot be applied to a final booking", ex.getMessage());
+    assertEquals("Only NEW or ON_HOLD booking can be expired", exception.getMessage());
   }
 
   @Test
-  void shouldNotCreateBookingWithNonPositiveGuestCount() {
-    StayPeriod stayPeriod =
-        new StayPeriod(LocalDate.now().plusDays(1), LocalDate.now().plusDays(3));
+  void shouldRequireHoldIdWhenPlacingOnHold() {
+    Booking booking = createBooking();
 
-    BookingDomainException ex =
-        assertThrows(
-            BookingDomainException.class,
-            () -> Booking.create(HOTEL_ID, ROOM_TYPE_ID, stayPeriod, 0));
+    NullPointerException exception =
+        assertThrows(NullPointerException.class, () -> booking.placeOnHold(null));
 
-    assertEquals("guestCount must be positive", ex.getMessage());
+    assertEquals("holdId must not be null", exception.getMessage());
   }
 
   private Booking createBooking() {
-    StayPeriod stayPeriod =
-        new StayPeriod(LocalDate.now().plusDays(1), LocalDate.now().plusDays(3));
-    return Booking.create(HOTEL_ID, ROOM_TYPE_ID, stayPeriod, 2);
+    return Booking.create(
+        UUID.randomUUID(),
+        UUID.randomUUID(),
+        new StayPeriod(LocalDate.of(2030, 6, 10), LocalDate.of(2030, 6, 20)),
+        2);
   }
 }

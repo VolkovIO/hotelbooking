@@ -7,6 +7,7 @@ import com.example.hotelbooking.inventory.application.port.RoomAvailabilityRepos
 import com.example.hotelbooking.inventory.domain.Hotel;
 import com.example.hotelbooking.inventory.domain.RoomAvailability;
 import java.time.LocalDate;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -25,25 +26,34 @@ public class InitializeRoomAvailabilityUseCase {
 
     hotel.requireRoomType(command.roomTypeId());
 
-    for (LocalDate date = command.startDate();
-        !date.isAfter(command.endDate());
-        date = date.plusDays(1)) {
+    validateRangeDoesNotExist(
+        command.hotelId(), command.roomTypeId(), command.startDate(), command.endDate());
+    createRange(
+        command.hotelId(),
+        command.roomTypeId(),
+        command.startDate(),
+        command.endDate(),
+        command.totalRooms());
+  }
 
-      final LocalDate currentDate = date;
+  private void validateRangeDoesNotExist(
+      UUID hotelId, UUID roomTypeId, LocalDate startDate, LocalDate endDate) {
 
-      roomAvailabilityRepository
-          .findByHotelIdAndRoomTypeIdAndDate(command.hotelId(), command.roomTypeId(), currentDate)
-          .ifPresent(
-              existing -> {
-                throw new RoomAvailabilityAlreadyExistsException(
-                    command.hotelId(), command.roomTypeId(), currentDate);
-              });
+    for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
+      if (roomAvailabilityRepository
+          .findByHotelIdAndRoomTypeIdAndDate(hotelId, roomTypeId, date)
+          .isPresent()) {
+        throw new RoomAvailabilityAlreadyExistsException(hotelId, roomTypeId, date);
+      }
+    }
+  }
 
-      RoomAvailability availability =
-          RoomAvailability.create(
-              command.hotelId(), command.roomTypeId(), date, command.totalRooms());
+  private void createRange(
+      UUID hotelId, UUID roomTypeId, LocalDate startDate, LocalDate endDate, int totalRooms) {
 
-      roomAvailabilityRepository.save(availability);
+    for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
+      roomAvailabilityRepository.save(
+          RoomAvailability.create(hotelId, roomTypeId, date, totalRooms));
     }
   }
 }

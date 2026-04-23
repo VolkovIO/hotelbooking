@@ -37,11 +37,12 @@ public class BookingController {
       summary = "Create booking",
       description =
           """
-      Creates a new booking draft for the selected hotel, room type, and stay period.
+          Creates a new booking for the selected hotel, room type, and stay period.
 
-      The booking is created in the initial domain state and stored in the current persistence profile.
-      At this stage, the flow does not yet include inventory hold or payment processing.
-      """)
+          The booking flow immediately attempts to place an inventory hold for the requested stay period.
+          If the hold is created successfully, the booking is stored in ON_HOLD status.
+          Payment processing is not part of the current flow.
+          """)
   @PostMapping
   @ResponseStatus(HttpStatus.CREATED)
   public BookingResponse create(@Valid @RequestBody CreateBookingRequest request) {

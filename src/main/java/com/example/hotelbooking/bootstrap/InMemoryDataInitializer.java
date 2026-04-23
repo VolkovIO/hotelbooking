@@ -11,6 +11,7 @@ import com.example.hotelbooking.inventory.application.command.InitializeRoomAvai
 import com.example.hotelbooking.inventory.application.command.RegisterHotelCommand;
 import com.example.hotelbooking.inventory.application.command.RegisterHotelUseCase;
 import com.example.hotelbooking.inventory.application.command.RoomAvailabilityPeriodCommand;
+import com.example.hotelbooking.inventory.application.port.HotelRepository;
 import com.example.hotelbooking.inventory.domain.Hotel;
 import com.example.hotelbooking.inventory.domain.RoomType;
 import java.time.LocalDate;
@@ -32,25 +33,29 @@ public class InMemoryDataInitializer implements ApplicationRunner {
   private final InitializeRoomAvailabilityUseCase initializeRoomAvailabilityUseCase;
   private final CreateBookingUseCase createBookingUseCase;
   private final ConfirmBookingUseCase confirmBookingUseCase;
+  private final HotelRepository hotelRepository;
 
   @Override
   public void run(ApplicationArguments args) {
     Hotel hotel = registerHotelUseCase.execute(new RegisterHotelCommand("Demo Hotel", "Kazan"));
 
-    Hotel hotelAfterStandard =
-        addRoomTypeUseCase.execute(new AddRoomTypeCommand(hotel.getId(), "STANDARD", 2));
+    addRoomTypeUseCase.execute(new AddRoomTypeCommand(hotel.getId(), "STANDARD", 2));
+    addRoomTypeUseCase.execute(new AddRoomTypeCommand(hotel.getId(), "LUX", 4));
 
-    Hotel hotelAfterLux =
-        addRoomTypeUseCase.execute(new AddRoomTypeCommand(hotel.getId(), "LUX", 4));
+    Hotel persistedHotel =
+        hotelRepository
+            .findById(hotel.getId())
+            .orElseThrow(
+                () -> new IllegalStateException("Demo hotel not found after initialization"));
 
     RoomType standardRoomType =
-        hotelAfterStandard.getRoomTypes().stream()
+        persistedHotel.getRoomTypes().stream()
             .filter(roomType -> "STANDARD".equals(roomType.getName()))
             .findFirst()
             .orElseThrow(() -> new IllegalStateException("STANDARD room type not found"));
 
     RoomType luxRoomType =
-        hotelAfterLux.getRoomTypes().stream()
+        persistedHotel.getRoomTypes().stream()
             .filter(roomType -> "LUX".equals(roomType.getName()))
             .findFirst()
             .orElseThrow(() -> new IllegalStateException("LUX room type not found"));
@@ -79,6 +84,7 @@ public class InMemoryDataInitializer implements ApplicationRunner {
                 LocalDate.of(2030, 6, 10),
                 LocalDate.of(2030, 6, 20),
                 2));
+
     Booking confirmedBooking =
         confirmBookingUseCase.execute(new ConfirmBookingCommand(booking.getId()));
 

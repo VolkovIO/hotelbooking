@@ -2,6 +2,7 @@ package com.example.hotelbooking.booking.infrastructure.integration;
 
 import com.example.hotelbooking.booking.application.port.InventoryLookupPort;
 import com.example.hotelbooking.inventory.application.port.HotelRepository;
+import java.util.OptionalInt;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
@@ -26,5 +27,18 @@ final class InventoryLookupAdapter implements InventoryLookupPort {
                 hotel.getRoomTypes().stream()
                     .anyMatch(roomType -> roomType.getId().equals(roomTypeId)))
         .orElse(false);
+  }
+
+  @Override
+  public OptionalInt findRoomTypeGuestCapacity(UUID hotelId, UUID roomTypeId) {
+    return hotelRepository
+        .findById(hotelId)
+        .flatMap(
+            hotel ->
+                hotel.getRoomTypes().stream()
+                    .filter(roomType -> roomType.getId().equals(roomTypeId))
+                    .findFirst())
+        .map(roomType -> OptionalInt.of(roomType.getGuestCapacity()))
+        .orElseGet(OptionalInt::empty);
   }
 }

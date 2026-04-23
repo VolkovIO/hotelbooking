@@ -18,7 +18,7 @@ public record BookingResponse(
     @Schema(description = "Check-in date", example = "2026-05-10") LocalDate checkIn,
     @Schema(description = "Check-out date", example = "2026-05-15") LocalDate checkOut,
     @Schema(description = "Number of guests", example = "2") int guestCount,
-    @Schema(description = "Current booking status", example = "NEW") String status) {
+    @Schema(description = "Current booking status", example = "ON_HOLD") String status) {
 
   public static BookingResponse from(Booking booking) {
     return new BookingResponse(

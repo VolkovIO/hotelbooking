@@ -7,6 +7,7 @@ import com.example.hotelbooking.inventory.application.port.RoomAvailabilityRepos
 import com.example.hotelbooking.inventory.domain.Hotel;
 import com.example.hotelbooking.inventory.domain.RoomAvailability;
 import java.time.LocalDate;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -25,23 +26,41 @@ public class AdjustRoomCapacityUseCase {
 
     hotel.requireRoomType(command.roomTypeId());
 
-    for (LocalDate date = command.startDate();
-        !date.isAfter(command.endDate());
-        date = date.plusDays(1)) {
+    validateRangeExists(
+        command.hotelId(), command.roomTypeId(), command.startDate(), command.endDate());
+    adjustRange(
+        command.hotelId(),
+        command.roomTypeId(),
+        command.startDate(),
+        command.endDate(),
+        command.totalRooms());
+  }
 
-      final LocalDate currentDate = date;
+  private void validateRangeExists(
+      UUID hotelId, UUID roomTypeId, LocalDate startDate, LocalDate endDate) {
 
-      RoomAvailability availability =
+    for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
+      if (roomAvailabilityRepository
+          .findByHotelIdAndRoomTypeIdAndDate(hotelId, roomTypeId, date)
+          .isEmpty()) {
+        throw new RoomAvailabilityNotFoundException(hotelId, roomTypeId, date);
+      }
+    }
+  }
+
+  private void adjustRange(
+      UUID hotelId, UUID roomTypeId, LocalDate startDate, LocalDate endDate, int totalRooms) {
+
+    for (LocalDate date = startDate; !date.isAfter(endDate); date = date.plusDays(1)) {
+      final LocalDate finalDate = date;
+      RoomAvailability roomAvailability =
           roomAvailabilityRepository
-              .findByHotelIdAndRoomTypeIdAndDate(
-                  command.hotelId(), command.roomTypeId(), currentDate)
+              .findByHotelIdAndRoomTypeIdAndDate(hotelId, roomTypeId, date)
               .orElseThrow(
-                  () ->
-                      new RoomAvailabilityNotFoundException(
-                          command.hotelId(), command.roomTypeId(), currentDate));
+                  () -> new RoomAvailabilityNotFoundException(hotelId, roomTypeId, finalDate));
 
-      availability.adjustCapacity(command.totalRooms());
-      roomAvailabilityRepository.save(availability);
+      roomAvailability.adjustCapacity(totalRooms);
+      roomAvailabilityRepository.save(roomAvailability);
     }
   }
 }
