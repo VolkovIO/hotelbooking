@@ -2,10 +2,10 @@ package com.example.hotelbooking.booking.adapter.out.integration.inventory;
 
 import com.example.hotelbooking.booking.application.exception.RoomHoldFailedException;
 import com.example.hotelbooking.booking.application.port.out.InventoryReservationPort;
-import com.example.hotelbooking.inventory.application.command.ConfirmRoomHoldUseCase;
-import com.example.hotelbooking.inventory.application.command.ReleaseRoomHoldUseCase;
-import com.example.hotelbooking.inventory.application.port.RoomAvailabilityRepository;
-import com.example.hotelbooking.inventory.application.port.RoomHoldRepository;
+import com.example.hotelbooking.inventory.application.port.in.ConfirmRoomHoldUseCase;
+import com.example.hotelbooking.inventory.application.port.in.ReleaseRoomHoldUseCase;
+import com.example.hotelbooking.inventory.application.port.out.RoomAvailabilityRepository;
+import com.example.hotelbooking.inventory.application.port.out.RoomHoldRepository;
 import com.example.hotelbooking.inventory.domain.InventoryDomainException;
 import com.example.hotelbooking.inventory.domain.RoomAvailability;
 import com.example.hotelbooking.inventory.domain.RoomHold;

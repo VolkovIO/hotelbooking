@@ -2,16 +2,16 @@ package com.example.hotelbooking.bootstrap;
 
 import com.example.hotelbooking.booking.application.command.ConfirmBookingCommand;
 import com.example.hotelbooking.booking.application.command.CreateBookingCommand;
+import com.example.hotelbooking.booking.application.port.in.ConfirmBookingUseCase;
 import com.example.hotelbooking.booking.application.port.in.CreateBookingUseCase;
-import com.example.hotelbooking.booking.application.service.ConfirmBookingService;
 import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.inventory.application.command.AddRoomTypeCommand;
-import com.example.hotelbooking.inventory.application.command.AddRoomTypeUseCase;
-import com.example.hotelbooking.inventory.application.command.InitializeRoomAvailabilityUseCase;
 import com.example.hotelbooking.inventory.application.command.RegisterHotelCommand;
-import com.example.hotelbooking.inventory.application.command.RegisterHotelUseCase;
 import com.example.hotelbooking.inventory.application.command.RoomAvailabilityPeriodCommand;
-import com.example.hotelbooking.inventory.application.port.HotelRepository;
+import com.example.hotelbooking.inventory.application.port.in.AddRoomTypeUseCase;
+import com.example.hotelbooking.inventory.application.port.in.InitializeRoomAvailabilityUseCase;
+import com.example.hotelbooking.inventory.application.port.in.RegisterHotelUseCase;
+import com.example.hotelbooking.inventory.application.port.out.HotelRepository;
 import com.example.hotelbooking.inventory.domain.Hotel;
 import com.example.hotelbooking.inventory.domain.RoomType;
 import java.time.LocalDate;
@@ -32,7 +32,7 @@ public class InMemoryDataInitializer implements ApplicationRunner {
   private final AddRoomTypeUseCase addRoomTypeUseCase;
   private final InitializeRoomAvailabilityUseCase initializeRoomAvailabilityUseCase;
   private final CreateBookingUseCase createBookingUseCase;
-  private final ConfirmBookingService confirmBookingUseCase;
+  private final ConfirmBookingUseCase confirmBookingUseCase;
   private final HotelRepository hotelRepository;
 
   @Override

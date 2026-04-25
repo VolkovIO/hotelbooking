@@ -1,7 +1,7 @@
 package com.example.hotelbooking.booking.adapter.out.integration.inventory;
 
 import com.example.hotelbooking.booking.application.port.out.InventoryLookupPort;
-import com.example.hotelbooking.inventory.application.port.HotelRepository;
+import com.example.hotelbooking.inventory.application.port.out.HotelRepository;
 import java.util.OptionalInt;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
