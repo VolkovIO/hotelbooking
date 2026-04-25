@@ -1,15 +1,15 @@
-package com.example.hotelbooking.booking.adapter.out.integration.inventory;
+package com.example.hotelbooking.inventory.application.service;
 
-import com.example.hotelbooking.booking.application.port.out.InventoryLookupPort;
+import com.example.hotelbooking.inventory.application.port.in.InventoryQueryUseCase;
 import com.example.hotelbooking.inventory.application.port.out.HotelRepository;
 import java.util.OptionalInt;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
-@Component
+@Service
 @RequiredArgsConstructor
-final class InventoryLookupAdapter implements InventoryLookupPort {
+public class InventoryQueryService implements InventoryQueryUseCase {
 
   private final HotelRepository hotelRepository;
 
