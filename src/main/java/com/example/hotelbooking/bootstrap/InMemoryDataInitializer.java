@@ -1,9 +1,9 @@
 package com.example.hotelbooking.bootstrap;
 
 import com.example.hotelbooking.booking.application.command.ConfirmBookingCommand;
-import com.example.hotelbooking.booking.application.command.ConfirmBookingUseCase;
 import com.example.hotelbooking.booking.application.command.CreateBookingCommand;
-import com.example.hotelbooking.booking.application.command.CreateBookingUseCase;
+import com.example.hotelbooking.booking.application.port.in.CreateBookingUseCase;
+import com.example.hotelbooking.booking.application.service.ConfirmBookingService;
 import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.inventory.application.command.AddRoomTypeCommand;
 import com.example.hotelbooking.inventory.application.command.AddRoomTypeUseCase;
@@ -32,7 +32,7 @@ public class InMemoryDataInitializer implements ApplicationRunner {
   private final AddRoomTypeUseCase addRoomTypeUseCase;
   private final InitializeRoomAvailabilityUseCase initializeRoomAvailabilityUseCase;
   private final CreateBookingUseCase createBookingUseCase;
-  private final ConfirmBookingUseCase confirmBookingUseCase;
+  private final ConfirmBookingService confirmBookingUseCase;
   private final HotelRepository hotelRepository;
 
   @Override

@@ -1,4 +1,4 @@
-package com.example.hotelbooking.booking.api;
+package com.example.hotelbooking.booking.adapter.in.web;
 
 import com.example.hotelbooking.booking.domain.Booking;
 import io.swagger.v3.oas.annotations.media.Schema;

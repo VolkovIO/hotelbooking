@@ -1,6 +1,6 @@
-package com.example.hotelbooking.booking.infrastructure.integration;
+package com.example.hotelbooking.booking.adapter.out.integration.inventory;
 
-import com.example.hotelbooking.booking.application.port.InventoryLookupPort;
+import com.example.hotelbooking.booking.application.port.out.InventoryLookupPort;
 import com.example.hotelbooking.inventory.application.port.HotelRepository;
 import java.util.OptionalInt;
 import java.util.UUID;

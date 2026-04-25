@@ -1,12 +1,12 @@
-package com.example.hotelbooking.booking.api;
+package com.example.hotelbooking.booking.adapter.in.web;
 
 import com.example.hotelbooking.booking.application.command.CancelBookingCommand;
-import com.example.hotelbooking.booking.application.command.CancelBookingUseCase;
 import com.example.hotelbooking.booking.application.command.ConfirmBookingCommand;
-import com.example.hotelbooking.booking.application.command.ConfirmBookingUseCase;
 import com.example.hotelbooking.booking.application.command.CreateBookingCommand;
-import com.example.hotelbooking.booking.application.command.CreateBookingUseCase;
-import com.example.hotelbooking.booking.application.query.GetBookingByIdUseCase;
+import com.example.hotelbooking.booking.application.port.in.CancelBookingUseCase;
+import com.example.hotelbooking.booking.application.port.in.CreateBookingUseCase;
+import com.example.hotelbooking.booking.application.service.GetBookingByIdService;
+import com.example.hotelbooking.booking.application.service.ConfirmBookingService;
 import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.booking.domain.BookingId;
 import io.swagger.v3.oas.annotations.Operation;
@@ -29,9 +29,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class BookingController {
 
   private final CreateBookingUseCase createBookingUseCase;
-  private final GetBookingByIdUseCase getBookingByIdUseCase;
+  private final GetBookingByIdService getBookingByIdUseCase;
   private final CancelBookingUseCase cancelBookingUseCase;
-  private final ConfirmBookingUseCase confirmBookingUseCase;
+  private final ConfirmBookingService confirmBookingUseCase;
 
   @Operation(
       summary = "Create booking",

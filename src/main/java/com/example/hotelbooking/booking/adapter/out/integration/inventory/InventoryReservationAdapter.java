@@ -1,7 +1,7 @@
-package com.example.hotelbooking.booking.infrastructure.integration;
+package com.example.hotelbooking.booking.adapter.out.integration.inventory;
 
 import com.example.hotelbooking.booking.application.exception.RoomHoldFailedException;
-import com.example.hotelbooking.booking.application.port.InventoryReservationPort;
+import com.example.hotelbooking.booking.application.port.out.InventoryReservationPort;
 import com.example.hotelbooking.inventory.application.command.ConfirmRoomHoldUseCase;
 import com.example.hotelbooking.inventory.application.command.ReleaseRoomHoldUseCase;
 import com.example.hotelbooking.inventory.application.port.RoomAvailabilityRepository;

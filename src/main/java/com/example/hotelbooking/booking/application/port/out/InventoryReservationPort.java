@@ -1,4 +1,4 @@
-package com.example.hotelbooking.booking.application.port;
+package com.example.hotelbooking.booking.application.port.out;
 
 import java.time.LocalDate;
 import java.util.UUID;

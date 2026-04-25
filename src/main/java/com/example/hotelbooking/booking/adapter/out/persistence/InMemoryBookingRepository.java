@@ -1,6 +1,6 @@
-package com.example.hotelbooking.booking.infrastructure.persistence;
+package com.example.hotelbooking.booking.adapter.out.persistence;
 
-import com.example.hotelbooking.booking.application.port.BookingRepository;
+import com.example.hotelbooking.booking.application.port.out.BookingRepository;
 import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.booking.domain.BookingId;
 import java.util.Map;
