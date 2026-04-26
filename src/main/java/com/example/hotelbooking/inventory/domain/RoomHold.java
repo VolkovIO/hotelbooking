@@ -32,6 +32,11 @@ public final class RoomHold {
     return new RoomHold(UUID.randomUUID(), hotelId, roomTypeId, checkIn, checkOut, rooms);
   }
 
+  public static RoomHold restore(
+      UUID id, UUID hotelId, UUID roomTypeId, LocalDate checkIn, LocalDate checkOut, int rooms) {
+    return new RoomHold(id, hotelId, roomTypeId, checkIn, checkOut, rooms);
+  }
+
   public UUID getId() {
     return id;
   }
