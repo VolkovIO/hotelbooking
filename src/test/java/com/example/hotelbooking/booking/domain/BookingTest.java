@@ -159,6 +159,25 @@ class BookingTest {
     assertEquals("holdId must not be null", exception.getMessage());
   }
 
+  @Test
+  void shouldCancelConfirmedBooking() {
+    Booking booking = createBooking();
+    booking.placeOnHold(UUID.randomUUID());
+    booking.confirmHeldBooking();
+
+    booking.cancelConfirmedBooking();
+
+    assertEquals(BookingStatus.CANCELLED, booking.getStatus());
+    assertNull(booking.getHoldId());
+  }
+
+  @Test
+  void shouldNotCancelConfirmedBookingWhenStatusIsNotConfirmed() {
+    Booking booking = createBooking();
+
+    assertThrows(BookingDomainException.class, booking::cancelConfirmedBooking);
+  }
+
   private Booking createBooking() {
     return Booking.create(
         UUID.randomUUID(),

@@ -15,6 +15,8 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class CancelBookingService implements CancelBookingUseCase {
 
+  private static final int ROOMS_PER_BOOKING = 1;
+
   private final BookingRepository bookingRepository;
   private final InventoryReservationPort inventoryReservationPort;
 
@@ -25,6 +27,18 @@ public class CancelBookingService implements CancelBookingUseCase {
             .findById(command.bookingId())
             .orElseThrow(() -> new BookingNotFoundException(command.bookingId()));
 
+    if (booking.isOnHold()) {
+      cancelHeldBooking(booking);
+    } else if (booking.isConfirmed()) {
+      cancelConfirmedBooking(booking);
+    } else {
+      throw new BookingDomainException("Only ON_HOLD or CONFIRMED booking can be cancelled");
+    }
+
+    return bookingRepository.save(booking);
+  }
+
+  private void cancelHeldBooking(Booking booking) {
     UUID holdId = booking.getHoldId();
     if (holdId == null) {
       throw new BookingDomainException("Booking has no active hold to cancel");
@@ -32,7 +46,16 @@ public class CancelBookingService implements CancelBookingUseCase {
 
     inventoryReservationPort.releaseHold(holdId);
     booking.cancelHeldBooking();
+  }
 
-    return bookingRepository.save(booking);
+  private void cancelConfirmedBooking(Booking booking) {
+    inventoryReservationPort.cancelConfirmedReservation(
+        booking.getHotelId(),
+        booking.getRoomTypeId(),
+        booking.getStayPeriod().checkIn(),
+        booking.getStayPeriod().checkOut(),
+        ROOMS_PER_BOOKING);
+
+    booking.cancelConfirmedBooking();
   }
 }

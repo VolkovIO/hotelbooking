@@ -63,4 +63,30 @@ public class InventoryReservationService implements InventoryReservationUseCase 
   public void confirmHold(UUID holdId) {
     confirmRoomHoldUseCase.execute(holdId);
   }
+
+  @Override
+  public void cancelConfirmedReservation(
+      UUID hotelId, UUID roomTypeId, LocalDate checkIn, LocalDate checkOut, int rooms) {
+    LocalDate availabilityTo = checkOut.minusDays(1);
+
+    if (availabilityTo.isBefore(checkIn)) {
+      throw new InventoryDomainException("Invalid reservation cancellation period");
+    }
+
+    long requiredDays = ChronoUnit.DAYS.between(checkIn, checkOut);
+
+    List<RoomAvailability> availabilityList =
+        roomAvailabilityRepository.findByRoomTypeAndDateRange(
+            hotelId, roomTypeId, checkIn, availabilityTo);
+
+    if (availabilityList.size() != requiredDays) {
+      throw new InventoryDomainException(
+          "Availability is not configured for the full reservation cancellation period");
+    }
+
+    List<RoomAvailability> updatedAvailability =
+        availabilityList.stream().map(item -> item.releaseBookedRooms(rooms)).toList();
+
+    roomAvailabilityRepository.saveAll(updatedAvailability);
+  }
 }

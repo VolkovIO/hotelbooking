@@ -75,4 +75,27 @@ class InventoryReservationAclAdapterTest {
 
     assertSame(cause, exception.getCause());
   }
+
+  @Test
+  void shouldTranslateInventoryExceptionWhenCancellingConfirmedReservationFails() {
+    UUID hotelId = UUID.randomUUID();
+    UUID roomTypeId = UUID.randomUUID();
+    LocalDate checkIn = LocalDate.of(2030, 6, 10);
+    LocalDate checkOut = LocalDate.of(2030, 6, 20);
+    int rooms = 1;
+
+    InventoryDomainException cause = new InventoryDomainException("test inventory failure");
+
+    doThrow(cause)
+        .when(inventoryReservationUseCase)
+        .cancelConfirmedReservation(hotelId, roomTypeId, checkIn, checkOut, rooms);
+
+    RoomHoldFailedException exception =
+        assertThrows(
+            RoomHoldFailedException.class,
+            () ->
+                adapter.cancelConfirmedReservation(hotelId, roomTypeId, checkIn, checkOut, rooms));
+
+    assertSame(cause, exception.getCause());
+  }
 }

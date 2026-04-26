@@ -10,4 +10,7 @@ public interface InventoryReservationPort {
   void releaseHold(UUID holdId);
 
   void confirmHold(UUID holdId);
+
+  void cancelConfirmedReservation(
+      UUID hotelId, UUID roomTypeId, LocalDate checkIn, LocalDate checkOut, int rooms);
 }

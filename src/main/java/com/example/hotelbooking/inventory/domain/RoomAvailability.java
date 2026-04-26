@@ -7,6 +7,8 @@ import java.util.UUID;
 @SuppressWarnings("PMD.CyclomaticComplexity")
 public final class RoomAvailability {
 
+  private static final String ROOMS_MUST_BE_POSITIVE = "rooms must be positive";
+
   private final UUID hotelId;
   private final UUID roomTypeId;
   private final LocalDate date;
@@ -39,7 +41,7 @@ public final class RoomAvailability {
   }
 
   public RoomAvailability placeHold(int rooms) {
-    int normalizedRooms = requirePositive(rooms, "rooms must be positive");
+    final int normalizedRooms = requirePositive(rooms, ROOMS_MUST_BE_POSITIVE);
 
     if (availableRooms() < normalizedRooms) {
       throw new InventoryDomainException("Not enough rooms available to place hold");
@@ -50,7 +52,7 @@ public final class RoomAvailability {
   }
 
   public RoomAvailability releaseHold(int rooms) {
-    int normalizedRooms = requirePositive(rooms, "rooms must be positive");
+    final int normalizedRooms = requirePositive(rooms, ROOMS_MUST_BE_POSITIVE);
 
     if (heldRooms < normalizedRooms) {
       throw new InventoryDomainException("Cannot release more held rooms than currently held");
@@ -60,8 +62,19 @@ public final class RoomAvailability {
         hotelId, roomTypeId, date, totalRooms, heldRooms - normalizedRooms, bookedRooms);
   }
 
+  public RoomAvailability releaseBookedRooms(int rooms) {
+    final int normalizedRooms = requirePositive(rooms, ROOMS_MUST_BE_POSITIVE);
+
+    if (bookedRooms < normalizedRooms) {
+      throw new InventoryDomainException("Cannot release more booked rooms than currently booked");
+    }
+
+    return new RoomAvailability(
+        hotelId, roomTypeId, date, totalRooms, heldRooms, bookedRooms - normalizedRooms);
+  }
+
   public RoomAvailability confirmHold(int rooms) {
-    int normalizedRooms = requirePositive(rooms, "rooms must be positive");
+    final int normalizedRooms = requirePositive(rooms, ROOMS_MUST_BE_POSITIVE);
 
     if (heldRooms < normalizedRooms) {
       throw new InventoryDomainException("Cannot confirm more held rooms than currently held");
