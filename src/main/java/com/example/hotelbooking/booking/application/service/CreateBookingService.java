@@ -24,6 +24,8 @@ public class CreateBookingService implements CreateBookingUseCase {
 
   @Override
   public Booking execute(CreateBookingCommand command) {
+    final StayPeriod stayPeriod = new StayPeriod(command.checkIn(), command.checkOut());
+
     if (!inventoryLookupPort.hotelExists(command.hotelId())) {
       throw new HotelReferenceNotFoundException(command.hotelId());
     }
@@ -47,8 +49,6 @@ public class CreateBookingService implements CreateBookingUseCase {
     UUID holdId =
         inventoryReservationPort.placeHold(
             command.hotelId(), command.roomTypeId(), command.checkIn(), command.checkOut(), 1);
-
-    StayPeriod stayPeriod = new StayPeriod(command.checkIn(), command.checkOut());
 
     Booking booking =
         Booking.create(command.hotelId(), command.roomTypeId(), stayPeriod, command.guestCount());
