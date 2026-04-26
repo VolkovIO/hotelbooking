@@ -55,4 +55,18 @@ final class InventoryReservationAclAdapter implements InventoryReservationPort {
       String operation, UUID holdId, RuntimeException cause) {
     return new RoomHoldFailedException("Failed to " + operation + " room hold: " + holdId, cause);
   }
+
+  @Override
+  public void cancelConfirmedReservation(
+      UUID hotelId, UUID roomTypeId, LocalDate checkIn, LocalDate checkOut, int rooms) {
+    try {
+      inventoryReservationUseCase.cancelConfirmedReservation(
+          hotelId, roomTypeId, checkIn, checkOut, rooms);
+    } catch (InventoryDomainException exception) {
+      throw new RoomHoldFailedException(
+          "Failed to cancel confirmed reservation for hotel %s and room type %s"
+              .formatted(hotelId, roomTypeId),
+          exception);
+    }
+  }
 }

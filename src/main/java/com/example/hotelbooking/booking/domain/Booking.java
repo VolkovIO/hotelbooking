@@ -71,6 +71,21 @@ public final class Booking {
     this.holdId = null;
   }
 
+  public boolean isOnHold() {
+    return status == BookingStatus.ON_HOLD;
+  }
+
+  public boolean isConfirmed() {
+    return status == BookingStatus.CONFIRMED;
+  }
+
+  public void cancelConfirmedBooking() {
+    ensureStatus(BookingStatus.CONFIRMED, "Only CONFIRMED booking can be cancelled");
+
+    this.status = BookingStatus.CANCELLED;
+    this.holdId = null;
+  }
+
   public void cancelHeldBooking() {
     ensureStatus(BookingStatus.ON_HOLD, "Only ON_HOLD booking can be cancelled");
     ensureHoldPresent("Booking has no active hold to release");

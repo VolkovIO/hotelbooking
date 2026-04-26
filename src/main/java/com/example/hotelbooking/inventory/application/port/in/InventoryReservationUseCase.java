@@ -10,4 +10,7 @@ public interface InventoryReservationUseCase {
   void confirmHold(UUID holdId);
 
   void releaseHold(UUID holdId);
+
+  void cancelConfirmedReservation(
+      UUID hotelId, UUID roomTypeId, LocalDate checkIn, LocalDate checkOut, int rooms);
 }

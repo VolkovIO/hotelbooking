@@ -115,4 +115,28 @@ class RoomAvailabilityTest {
     assertEquals(2, availability.getBookedRooms(), "bookedRooms should remain unchanged");
     assertEquals(0, availability.availableRooms(), "availableRooms should become zero");
   }
+
+  @Test
+  void shouldReleaseBookedRoomsAndIncreaseAvailableRooms() {
+    RoomAvailability availability =
+        RoomAvailability.create(
+                UUID.randomUUID(), UUID.randomUUID(), LocalDate.now().plusDays(1), 10)
+            .placeHold(2)
+            .confirmHold(2);
+
+    RoomAvailability updated = availability.releaseBookedRooms(1);
+
+    assertEquals(0, updated.getHeldRooms(), "heldRooms should remain unchanged");
+    assertEquals(1, updated.getBookedRooms(), "bookedRooms should decrease");
+    assertEquals(9, updated.availableRooms(), "availableRooms should increase");
+  }
+
+  @Test
+  void shouldThrowExceptionWhenReleasingMoreBookedRoomsThanCurrentlyBooked() {
+    RoomAvailability availability =
+        RoomAvailability.create(
+            UUID.randomUUID(), UUID.randomUUID(), LocalDate.now().plusDays(1), 10);
+
+    assertThrows(InventoryDomainException.class, () -> availability.releaseBookedRooms(1));
+  }
 }
