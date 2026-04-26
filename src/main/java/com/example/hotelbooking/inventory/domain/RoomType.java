@@ -19,6 +19,10 @@ public final class RoomType {
     return new RoomType(UUID.randomUUID(), name, guestCapacity);
   }
 
+  public static RoomType restore(UUID id, String name, int guestCapacity) {
+    return new RoomType(id, name, guestCapacity);
+  }
+
   public UUID getId() {
     return id;
   }

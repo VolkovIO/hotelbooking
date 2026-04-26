@@ -9,6 +9,7 @@ import java.time.LocalDate;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
+@SuppressWarnings("PMD.CyclomaticComplexity")
 class BookingTest {
 
   @Test
@@ -176,6 +177,63 @@ class BookingTest {
     Booking booking = createBooking();
 
     assertThrows(BookingDomainException.class, booking::cancelConfirmedBooking);
+  }
+
+  @Test
+  void shouldRestoreConfirmedBooking() {
+    Booking booking =
+        Booking.restore(
+            BookingId.newId(),
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            new StayPeriod(LocalDate.of(2030, 6, 10), LocalDate.of(2030, 6, 12)),
+            2,
+            BookingStatus.CONFIRMED,
+            null);
+
+    assertEquals(BookingStatus.CONFIRMED, booking.getStatus());
+    assertNull(booking.getHoldId());
+  }
+
+  @Test
+  void shouldRejectRestoringOnHoldBookingWithoutHold() {
+    assertThrows(BookingDomainException.class, () -> restoreBooking(BookingStatus.ON_HOLD, null));
+  }
+
+  @Test
+  void shouldRejectRestoringConfirmedBookingWithHold() {
+    assertThrows(
+        BookingDomainException.class,
+        () -> restoreBooking(BookingStatus.CONFIRMED, UUID.randomUUID()));
+  }
+
+  @Test
+  void shouldRestoreOnHoldBookingWithHold() {
+    UUID holdId = UUID.randomUUID();
+
+    Booking booking = restoreBooking(BookingStatus.ON_HOLD, holdId);
+
+    assertEquals(BookingStatus.ON_HOLD, booking.getStatus());
+    assertEquals(holdId, booking.getHoldId());
+  }
+
+  @Test
+  void shouldRestoreConfirmedBookingWithoutHold() {
+    Booking booking = restoreBooking(BookingStatus.CONFIRMED, null);
+
+    assertEquals(BookingStatus.CONFIRMED, booking.getStatus());
+    assertNull(booking.getHoldId());
+  }
+
+  private Booking restoreBooking(BookingStatus status, UUID holdId) {
+    return Booking.restore(
+        BookingId.newId(),
+        UUID.randomUUID(),
+        UUID.randomUUID(),
+        new StayPeriod(LocalDate.of(2030, 6, 10), LocalDate.of(2030, 6, 12)),
+        2,
+        status,
+        holdId);
   }
 
   private Booking createBooking() {

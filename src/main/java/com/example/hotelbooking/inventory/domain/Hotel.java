@@ -24,6 +24,10 @@ public final class Hotel {
     return new Hotel(UUID.randomUUID(), name, city, List.of());
   }
 
+  public static Hotel restore(UUID id, String name, String city, List<RoomType> roomTypes) {
+    return new Hotel(id, name, city, roomTypes);
+  }
+
   public void addRoomType(String name, int guestCapacity) {
     boolean roomTypeAlreadyExists =
         roomTypes.stream().anyMatch(roomType -> roomType.getName().equalsIgnoreCase(name));

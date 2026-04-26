@@ -40,6 +40,16 @@ public final class RoomAvailability {
     return new RoomAvailability(hotelId, roomTypeId, date, totalRooms, 0, 0);
   }
 
+  public static RoomAvailability restore(
+      UUID hotelId,
+      UUID roomTypeId,
+      LocalDate date,
+      int totalRooms,
+      int heldRooms,
+      int bookedRooms) {
+    return new RoomAvailability(hotelId, roomTypeId, date, totalRooms, heldRooms, bookedRooms);
+  }
+
   public RoomAvailability placeHold(int rooms) {
     final int normalizedRooms = requirePositive(rooms, ROOMS_MUST_BE_POSITIVE);
 
@@ -89,16 +99,17 @@ public final class RoomAvailability {
         bookedRooms + normalizedRooms);
   }
 
-  public void adjustCapacity(int newTotalRooms) {
+  public RoomAvailability adjustCapacity(int newTotalRooms) {
     if (newTotalRooms <= 0) {
       throw new InventoryDomainException("totalRooms must be positive");
     }
 
-    if (newTotalRooms < heldRooms + bookedRooms) {
-      throw new InventoryDomainException("totalRooms cannot be lower than heldRooms + bookedRooms");
+    if (heldRooms + bookedRooms > newTotalRooms) {
+      throw new InventoryDomainException(
+          "totalRooms cannot be less than currently held and booked rooms");
     }
 
-    this.totalRooms = newTotalRooms;
+    return new RoomAvailability(hotelId, roomTypeId, date, newTotalRooms, heldRooms, bookedRooms);
   }
 
   public int availableRooms() {

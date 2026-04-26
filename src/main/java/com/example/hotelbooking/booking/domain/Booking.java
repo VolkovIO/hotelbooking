@@ -41,6 +41,20 @@ public final class Booking {
         BookingId.newId(), hotelId, roomTypeId, stayPeriod, guestCount, BookingStatus.NEW, null);
   }
 
+  public static Booking restore(
+      BookingId id,
+      UUID hotelId,
+      UUID roomTypeId,
+      StayPeriod stayPeriod,
+      int guestCount,
+      BookingStatus status,
+      UUID holdId) {
+
+    validateRestoredHoldState(status, holdId);
+
+    return new Booking(id, hotelId, roomTypeId, stayPeriod, guestCount, status, holdId);
+  }
+
   public void placeOnHold(UUID holdId) {
     ensureStatus(BookingStatus.NEW, "Only NEW booking can be placed on hold");
     this.holdId = Objects.requireNonNull(holdId, "holdId must not be null");
@@ -116,6 +130,18 @@ public final class Booking {
   private void ensureHoldPresent(String message) {
     if (holdId == null) {
       throw new BookingDomainException(message);
+    }
+  }
+
+  private static void validateRestoredHoldState(BookingStatus status, UUID holdId) {
+    Objects.requireNonNull(status, "status must not be null");
+
+    if (status == BookingStatus.ON_HOLD && holdId == null) {
+      throw new BookingDomainException("ON_HOLD booking must have an active hold");
+    }
+
+    if (status != BookingStatus.ON_HOLD && holdId != null) {
+      throw new BookingDomainException("Only ON_HOLD booking can have an active hold");
     }
   }
 }

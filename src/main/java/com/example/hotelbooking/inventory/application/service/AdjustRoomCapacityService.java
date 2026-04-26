@@ -62,8 +62,9 @@ public class AdjustRoomCapacityService implements AdjustRoomCapacityUseCase {
               .orElseThrow(
                   () -> new RoomAvailabilityNotFoundException(hotelId, roomTypeId, finalDate));
 
-      roomAvailability.adjustCapacity(totalRooms);
-      roomAvailabilityRepository.save(roomAvailability);
+      RoomAvailability adjustedAvailability = roomAvailability.adjustCapacity(totalRooms);
+
+      roomAvailabilityRepository.save(adjustedAvailability);
     }
   }
 }
