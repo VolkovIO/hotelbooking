@@ -1,13 +1,10 @@
 package com.example.hotelbooking.booking.application.port.out;
 
-import java.util.OptionalInt;
+import java.util.Optional;
 import java.util.UUID;
 
+@SuppressWarnings("PMD.ImplicitFunctionalInterface")
 public interface InventoryLookupPort {
 
-  boolean hotelExists(UUID hotelId);
-
-  boolean roomTypeExists(UUID hotelId, UUID roomTypeId);
-
-  OptionalInt findRoomTypeGuestCapacity(UUID hotelId, UUID roomTypeId);
+  Optional<RoomTypeReference> findRoomTypeReference(UUID hotelId, UUID roomTypeId);
 }

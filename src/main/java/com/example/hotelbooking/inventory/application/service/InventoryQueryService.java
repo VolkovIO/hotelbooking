@@ -1,8 +1,9 @@
 package com.example.hotelbooking.inventory.application.service;
 
 import com.example.hotelbooking.inventory.application.port.in.InventoryQueryUseCase;
+import com.example.hotelbooking.inventory.application.port.in.RoomTypeReferenceResult;
 import com.example.hotelbooking.inventory.application.port.out.HotelRepository;
-import java.util.OptionalInt;
+import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -14,31 +15,17 @@ public class InventoryQueryService implements InventoryQueryUseCase {
   private final HotelRepository hotelRepository;
 
   @Override
-  public boolean hotelExists(UUID hotelId) {
-    return hotelRepository.findById(hotelId).isPresent();
-  }
-
-  @Override
-  public boolean roomTypeExists(UUID hotelId, UUID roomTypeId) {
-    return hotelRepository
-        .findById(hotelId)
-        .map(
-            hotel ->
-                hotel.getRoomTypes().stream()
-                    .anyMatch(roomType -> roomType.getId().equals(roomTypeId)))
-        .orElse(false);
-  }
-
-  @Override
-  public OptionalInt findRoomTypeGuestCapacity(UUID hotelId, UUID roomTypeId) {
+  public Optional<RoomTypeReferenceResult> findRoomTypeReference(UUID hotelId, UUID roomTypeId) {
     return hotelRepository
         .findById(hotelId)
         .flatMap(
             hotel ->
                 hotel.getRoomTypes().stream()
                     .filter(roomType -> roomType.getId().equals(roomTypeId))
-                    .findFirst())
-        .map(roomType -> OptionalInt.of(roomType.getGuestCapacity()))
-        .orElseGet(OptionalInt::empty);
+                    .findFirst()
+                    .map(
+                        roomType ->
+                            new RoomTypeReferenceResult(
+                                hotelId, roomTypeId, roomType.getGuestCapacity())));
   }
 }

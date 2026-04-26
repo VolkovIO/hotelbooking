@@ -2,12 +2,12 @@ package com.example.hotelbooking.booking.application.service;
 
 import com.example.hotelbooking.booking.application.command.CreateBookingCommand;
 import com.example.hotelbooking.booking.application.exception.GuestCountExceedsRoomCapacityException;
-import com.example.hotelbooking.booking.application.exception.HotelReferenceNotFoundException;
 import com.example.hotelbooking.booking.application.exception.RoomTypeReferenceNotFoundException;
 import com.example.hotelbooking.booking.application.port.in.CreateBookingUseCase;
 import com.example.hotelbooking.booking.application.port.out.BookingRepository;
 import com.example.hotelbooking.booking.application.port.out.InventoryLookupPort;
 import com.example.hotelbooking.booking.application.port.out.InventoryReservationPort;
+import com.example.hotelbooking.booking.application.port.out.RoomTypeReference;
 import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.booking.domain.StayPeriod;
 import java.util.UUID;
@@ -26,24 +26,17 @@ public class CreateBookingService implements CreateBookingUseCase {
   public Booking execute(CreateBookingCommand command) {
     final StayPeriod stayPeriod = new StayPeriod(command.checkIn(), command.checkOut());
 
-    if (!inventoryLookupPort.hotelExists(command.hotelId())) {
-      throw new HotelReferenceNotFoundException(command.hotelId());
-    }
-
-    if (!inventoryLookupPort.roomTypeExists(command.hotelId(), command.roomTypeId())) {
-      throw new RoomTypeReferenceNotFoundException(command.hotelId(), command.roomTypeId());
-    }
-
-    int guestCapacity =
+    RoomTypeReference roomTypeReference =
         inventoryLookupPort
-            .findRoomTypeGuestCapacity(command.hotelId(), command.roomTypeId())
+            .findRoomTypeReference(command.hotelId(), command.roomTypeId())
             .orElseThrow(
                 () ->
                     new RoomTypeReferenceNotFoundException(
                         command.hotelId(), command.roomTypeId()));
 
-    if (command.guestCount() > guestCapacity) {
-      throw new GuestCountExceedsRoomCapacityException(command.guestCount(), guestCapacity);
+    if (command.guestCount() > roomTypeReference.guestCapacity()) {
+      throw new GuestCountExceedsRoomCapacityException(
+          command.guestCount(), roomTypeReference.guestCapacity());
     }
 
     UUID holdId =
