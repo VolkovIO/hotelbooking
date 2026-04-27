@@ -13,7 +13,7 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 @Profile("in-memory")
-final class InMemoryRoomAvailabilityRepository implements RoomAvailabilityRepository {
+class InMemoryRoomAvailabilityRepository implements RoomAvailabilityRepository {
 
   private final Map<String, RoomAvailability> storage = new ConcurrentHashMap<>();
 

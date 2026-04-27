@@ -6,3 +6,7 @@ spring:
       enabled: ALWAYS
   profiles:
     active: in-memory
+
+  data:
+    mongodb:
+      uri: mongodb://localhost:27017/hotelbooking

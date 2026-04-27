@@ -11,7 +11,7 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 @Profile("in-memory")
-final class InMemoryBookingRepository implements BookingRepository {
+class InMemoryBookingRepository implements BookingRepository {
 
   private final Map<BookingId, Booking> storage = new ConcurrentHashMap<>();
 
