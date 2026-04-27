@@ -5,8 +5,13 @@ spring:
     ansi:
       enabled: ALWAYS
   profiles:
-    active: in-memory
-
-  data:
-    mongodb:
-      uri: mongodb://localhost:27017/hotelbooking
+    group:
+      local-in-memory:
+        - booking-in-memory
+        - inventory-in-memory
+      local-mongo:
+        - booking-in-memory
+        - inventory-mongo
+      local-postgres-mongo:
+        - booking-postgres
+        - inventory-mongo

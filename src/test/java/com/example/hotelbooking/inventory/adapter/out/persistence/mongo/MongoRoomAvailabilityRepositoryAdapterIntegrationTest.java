@@ -16,7 +16,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
     "PMD.TestClassWithoutTestCases") // Test cases are inherited from repository contract.
 @DataMongoTest
 @Testcontainers
-@ActiveProfiles("mongo")
+@ActiveProfiles("inventory-mongo")
 @Import(MongoRoomAvailabilityRepositoryAdapter.class)
 class MongoRoomAvailabilityRepositoryAdapterIntegrationTest
     implements RoomAvailabilityRepositoryContractTest {

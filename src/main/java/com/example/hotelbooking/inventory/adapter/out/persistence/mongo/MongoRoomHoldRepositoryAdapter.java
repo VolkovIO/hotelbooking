@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 @Repository
-@Profile("mongo")
+@Profile("inventory-mongo")
 @RequiredArgsConstructor
 class MongoRoomHoldRepositoryAdapter implements RoomHoldRepository {
 

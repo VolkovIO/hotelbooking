@@ -10,7 +10,7 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 @Repository
-@Profile("in-memory")
+@Profile("inventory-in-memory")
 class InMemoryRoomHoldRepository implements RoomHoldRepository {
 
   private final Map<UUID, RoomHold> storage = new ConcurrentHashMap<>();
