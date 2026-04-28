@@ -4,4 +4,9 @@ import java.util.List;
 import java.util.UUID;
 
 public record HotelSummaryResult(
-    UUID hotelId, String name, String city, List<RoomTypeSummaryResult> roomTypes) {}
+    UUID hotelId, String name, String city, List<RoomTypeSummaryResult> roomTypes) {
+
+  public HotelSummaryResult {
+    roomTypes = List.copyOf(roomTypes);
+  }
+}

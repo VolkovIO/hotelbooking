@@ -85,3 +85,32 @@ Booking cancellation behavior:
 - if the booking is `ON_HOLD`, cancellation releases the inventory hold
 - if the booking is `CONFIRMED`, cancellation releases booked inventory rooms
 - cancelled bookings remain stored with status `CANCELLED`
+
+
+## Running with MongoDB inventory persistence
+
+Start MongoDB:
+```bash
+  docker compose up -d
+```
+
+Run the application with booking in-memory persistence and inventory MongoDB persistence:
+```bash
+  ./gradlew bootRun --args='--spring.profiles.active=local-mongo'
+```
+
+## Initializing demo inventory data
+
+Demo inventory data is stored in: docker/mongo/init/demo-data.js
+
+The script creates fixed demo hotels, room types and room availability for: 2030-06-01 .. 2030-06-30
+
+Initialize demo data from Git Bash:
+```bash  
+  docker compose exec -T mongo mongosh "mongodb://localhost:27017/hotelbooking" < docker/mongo/init/demo-data.js
+```
+
+Or Windows PowerShell:
+```bash 
+  Get-Content docker/mongo/init/demo-data.js | docker compose exec -T mongo mongosh "mongodb://localhost:27017/hotelbooking"
+```

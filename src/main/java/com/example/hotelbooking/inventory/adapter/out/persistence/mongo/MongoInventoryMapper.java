@@ -48,7 +48,7 @@ final class MongoInventoryMapper {
             .map(
                 roomType ->
                     RoomType.restore(
-                        roomType.getId(), roomType.getName(), roomType.getGuestCapacity()))
+                        roomType.getRoomTypeId(), roomType.getName(), roomType.getGuestCapacity()))
             .toList();
 
     return Hotel.restore(document.getId(), document.getName(), document.getCity(), roomTypes);

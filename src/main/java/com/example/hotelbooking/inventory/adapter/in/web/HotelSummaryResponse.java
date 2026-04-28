@@ -12,6 +12,10 @@ public record HotelSummaryResponse(
     @Schema(description = "Hotel city", example = "Kazan") String city,
     @Schema(description = "Room types") List<RoomTypeSummaryResponse> roomTypes) {
 
+  public HotelSummaryResponse {
+    roomTypes = List.copyOf(roomTypes);
+  }
+
   static HotelSummaryResponse from(HotelSummaryResult result) {
     return new HotelSummaryResponse(
         result.hotelId(),

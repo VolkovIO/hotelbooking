@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 class MongoRoomTypeDocument {
 
-  private UUID id;
+  private UUID roomTypeId;
 
   private String name;
 
