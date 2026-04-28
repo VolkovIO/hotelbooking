@@ -12,8 +12,8 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 @Repository
-@Profile("in-memory")
-final class InMemoryRoomAvailabilityRepository implements RoomAvailabilityRepository {
+@Profile("inventory-in-memory")
+class InMemoryRoomAvailabilityRepository implements RoomAvailabilityRepository {
 
   private final Map<String, RoomAvailability> storage = new ConcurrentHashMap<>();
 

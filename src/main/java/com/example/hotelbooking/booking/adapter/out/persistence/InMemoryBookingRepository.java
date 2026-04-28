@@ -10,8 +10,8 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Repository;
 
 @Repository
-@Profile("in-memory")
-final class InMemoryBookingRepository implements BookingRepository {
+@Profile("booking-in-memory")
+class InMemoryBookingRepository implements BookingRepository {
 
   private final Map<BookingId, Booking> storage = new ConcurrentHashMap<>();
 

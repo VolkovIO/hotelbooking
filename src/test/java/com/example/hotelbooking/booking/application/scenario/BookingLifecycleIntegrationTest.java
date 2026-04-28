@@ -56,7 +56,7 @@ import org.springframework.test.context.ActiveProfiles;
  */
 @DisplayName("Booking lifecycle scenarios")
 @SpringBootTest
-@ActiveProfiles("in-memory")
+@ActiveProfiles({"booking-in-memory", "inventory-in-memory"})
 class BookingLifecycleIntegrationTest {
 
   private static final LocalDate CHECK_IN = LocalDate.of(2030, 6, 10);
