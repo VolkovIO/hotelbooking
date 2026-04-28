@@ -5,6 +5,7 @@ import com.example.hotelbooking.inventory.application.command.RegisterHotelComma
 import com.example.hotelbooking.inventory.application.command.RoomAvailabilityPeriodCommand;
 import com.example.hotelbooking.inventory.application.port.in.AddRoomTypeUseCase;
 import com.example.hotelbooking.inventory.application.port.in.AdjustRoomCapacityUseCase;
+import com.example.hotelbooking.inventory.application.port.in.FindHotelsUseCase;
 import com.example.hotelbooking.inventory.application.port.in.GetHotelByIdUseCase;
 import com.example.hotelbooking.inventory.application.port.in.GetRoomAvailabilityUseCase;
 import com.example.hotelbooking.inventory.application.port.in.InitializeRoomAvailabilityUseCase;
@@ -40,6 +41,7 @@ public class InventoryController {
   private final InitializeRoomAvailabilityUseCase initializeRoomAvailabilityUseCase;
   private final AdjustRoomCapacityUseCase adjustRoomCapacityUseCase;
   private final GetRoomAvailabilityUseCase getRoomAvailabilityUseCase;
+  private final FindHotelsUseCase findHotelsUseCase;
 
   @Operation(
       summary = "Register hotel",
@@ -156,5 +158,11 @@ public class InventoryController {
         .stream()
         .map(RoomAvailabilityResponse::from)
         .toList();
+  }
+
+  @GetMapping
+  @Operation(summary = "Find hotels")
+  public List<HotelSummaryResponse> findHotels(@RequestParam(defaultValue = "3") int limit) {
+    return findHotelsUseCase.execute(limit).stream().map(HotelSummaryResponse::from).toList();
   }
 }
