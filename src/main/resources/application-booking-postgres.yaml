@@ -1,0 +1,10 @@
+spring:
+  datasource:
+    url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/hotelbooking}
+    username: ${POSTGRES_USERNAME:hotelbooking}
+    password: ${POSTGRES_PASSWORD:hotelbooking}
+    driver-class-name: org.postgresql.Driver
+
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.yaml

@@ -1,0 +1,93 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-bookings-table
+      author: volkovself
+      changes:
+        - createTable:
+            tableName: bookings
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: hotel_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: room_type_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: check_in
+                  type: date
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: check_out
+                  type: date
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: guest_count
+                  type: int
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: status
+                  type: varchar(32)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: hold_id
+                  type: uuid
+
+              - column:
+                  name: created_at
+                  type: timestamp with time zone
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: updated_at
+                  type: timestamp with time zone
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+
+        - createIndex:
+            tableName: bookings
+            indexName: ix_bookings_status
+            columns:
+              - column:
+                  name: status
+
+        - createIndex:
+            tableName: bookings
+            indexName: ix_bookings_hotel_room_type
+            columns:
+              - column:
+                  name: hotel_id
+              - column:
+                  name: room_type_id
+
+        - createIndex:
+            tableName: bookings
+            indexName: ix_bookings_stay_period
+            columns:
+              - column:
+                  name: check_in
+              - column:
+                  name: check_out

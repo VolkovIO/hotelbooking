@@ -87,30 +87,54 @@ Booking cancellation behavior:
 - cancelled bookings remain stored with status `CANCELLED`
 
 
-## Running with MongoDB inventory persistence
 
-Start MongoDB:
-```bash
+## Runtime profiles
+
+The application supports several local runtime profile groups.
+
+These profiles are used to switch persistence adapters without changing application or domain code.
+
+| Profile group | Booking persistence | Inventory persistence | Purpose |
+|---|---|---|---|
+| `local-in-memory` | In-memory | In-memory | Fast local/demo mode without external infrastructure |
+| `local-mongo` | In-memory | MongoDB | Testing MongoDB persistence for the inventory module |
+| `local-postgres-mongo` | PostgreSQL | MongoDB | Current full persistence mode |
+
+Profile groups are configured in `application.yaml`:
+
+```yaml
+spring:
+  profiles:
+    group:
+      local-in-memory:
+        - booking-in-memory
+        - inventory-in-memory
+      local-mongo:
+        - booking-in-memory
+        - inventory-mongo
+      local-postgres-mongo:
+        - booking-postgres
+        - inventory-mongo
+```
+
+Start MongoDB + Postgres in docker: 
+```bash 
   docker compose up -d
 ```
 
-Run the application with booking in-memory persistence and inventory MongoDB persistence:
-```bash
-  ./gradlew bootRun --args='--spring.profiles.active=local-mongo'
-```
+Run with a profile group: 
 
-## Initializing demo inventory data
+`./gradlew bootRun --args='--spring.profiles.active=local-postgres-mongo'`
+
+
+## Initializing demo inventory MongoDB data
 
 Demo inventory data is stored in: docker/mongo/init/demo-data.js
 
 The script creates fixed demo hotels, room types and room availability for: 2030-06-01 .. 2030-06-30
 
 Initialize demo data from Git Bash:
-```bash  
-  docker compose exec -T mongo mongosh "mongodb://localhost:27017/hotelbooking" < docker/mongo/init/demo-data.js
-```
 
-Or Windows PowerShell:
-```bash 
-  Get-Content docker/mongo/init/demo-data.js | docker compose exec -T mongo mongosh "mongodb://localhost:27017/hotelbooking"
+```bash
+  docker compose exec -T mongo mongosh "mongodb://localhost:27017/hotelbooking" < docker/mongo/init/demo-data.js
 ```
