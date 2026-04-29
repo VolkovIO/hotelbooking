@@ -13,5 +13,24 @@ services:
       retries: 5
       start_period: 10s
 
+  postgres:
+    image: postgres:17
+    container_name: hotelbooking-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: hotelbooking
+      POSTGRES_USER: hotelbooking
+      POSTGRES_PASSWORD: hotelbooking
+    volumes:
+      - hotelbooking_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hotelbooking -d hotelbooking"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
 volumes:
   hotelbooking_mongo_data:
+  hotelbooking_postgres_data:
