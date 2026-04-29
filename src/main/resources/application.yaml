@@ -9,6 +9,7 @@ spring:
       local-in-memory:
         - booking-in-memory
         - inventory-in-memory
+        - demo-in-memory
       local-mongo:
         - booking-in-memory
         - inventory-mongo

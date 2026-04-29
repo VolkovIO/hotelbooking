@@ -76,9 +76,10 @@ public class BookingController {
       summary = "Cancel booking",
       description =
           """
-          Cancels a booking that is currently on hold.
+          Cancels a booking that is currently on hold or already confirmed.
 
-          The associated inventory hold is released before the booking is marked as cancelled.
+          For an ON_HOLD booking, the associated inventory hold is released before the booking is marked as cancelled.
+          For a CONFIRMED booking, the booked inventory rooms are released before the booking is marked as cancelled.
           """)
   @PostMapping("/{bookingId}/cancel")
   public BookingResponse cancel(@PathVariable String bookingId) {

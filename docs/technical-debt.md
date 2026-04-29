@@ -2,7 +2,7 @@
 
 ## Current version
 
-`v0.2.1`
+`v0.2.2`
 
 The project is currently a learning modular monolith focused on Clean Architecture, DDD tactical patterns and explicit module boundaries.
 
@@ -25,7 +25,9 @@ The main implemented booking flow is:
       -> release booked inventory rooms
       -> booking becomes CANCELLED
 
-The project still uses in-memory repositories and is intentionally not production-ready yet.
+The project now has PostgreSQL persistence for booking and MongoDB persistence for inventory.
+It is still intentionally not production-ready: transaction boundaries, cross-module consistency,
+optimistic locking and idempotency are not fully addressed yet.
 
 ---
 
@@ -174,7 +176,7 @@ Potential aggregates/entities requiring restore methods:
 
 Current tests mostly verify domain behavior and application service behavior.
 
-Before replacing in-memory repositories with real persistence adapters, repository contract tests should be introduced.
+Now that real persistence adapters exist, repository contract tests should be introduced and aligned across implementations.
 
 The same contract should be reusable for different implementations.
 
@@ -182,7 +184,12 @@ Example:
 
 - `InMemoryBookingRepositoryTest`
 - `JdbcBookingRepositoryTest`
-- `MongoBookingRepositoryTest`
+- `InMemoryHotelRepositoryTest`
+- `MongoHotelRepositoryAdapterTest`
+- `InMemoryRoomAvailabilityRepositoryTest`
+- `MongoRoomAvailabilityRepositoryAdapterTest`
+- `InMemoryRoomHoldRepositoryTest`
+- `MongoRoomHoldRepositoryAdapterTest`
 
 The goal is to make sure all repository implementations preserve the same observable behavior.
 

@@ -4,7 +4,7 @@ A modular monolith backend for hotel booking, built with Java and Spring Boot.
 
 This project is being developed as a learning-oriented implementation of Clean Architecture, DDD, and an evolutionary path from a modular monolith to microservices.
 
-## Current stage: v0.2.1
+## Current stage: v0.2.2
 
 The project is a learning modular monolith for hotel booking.
 
