@@ -3,7 +3,9 @@ package com.example.hotelbooking.booking.adapter.out.integration.inventory.grpc;
 import com.example.hotelbooking.booking.application.exception.RoomHoldFailedException;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 final class BookingInventoryGrpcExceptionMapper {
 
   private BookingInventoryGrpcExceptionMapper() {}
@@ -11,6 +13,12 @@ final class BookingInventoryGrpcExceptionMapper {
   static RoomHoldFailedException inventoryCallFailed(
       String operation, StatusRuntimeException exception) {
     Status.Code code = exception.getStatus().getCode();
+
+    log.warn(
+        "Inventory gRPC call failed: operation={}, status={}, description={}",
+        operation,
+        code,
+        exception.getStatus().getDescription());
 
     if (code == Status.Code.NOT_FOUND
         || code == Status.Code.INVALID_ARGUMENT
