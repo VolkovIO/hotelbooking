@@ -16,3 +16,12 @@ spring:
       local-postgres-mongo:
         - booking-postgres
         - inventory-mongo
+        - inventory-grpc-server
+
+server:
+  port: 8080
+
+inventory:
+  grpc:
+    server:
+      port: 9090
