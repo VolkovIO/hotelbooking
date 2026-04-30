@@ -12,4 +12,8 @@
     <Class name="~.*\.model\..*"/>
     <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2,URF_UNREAD_FIELD"/>
   </Match>
+
+  <Match>
+    <Class name="~com\.example\.hotelbooking\.inventory\.grpc\.v1\..*"/>
+  </Match>
 </FindBugsFilter>

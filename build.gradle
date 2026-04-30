@@ -133,6 +133,10 @@ checkstyle {
 	config = resources.text.fromFile(file('config/checkstyle/google_checks.xml'))
 }
 
+tasks.withType(Checkstyle).configureEach {
+	exclude '**/com/example/hotelbooking/inventory/grpc/v1/**'
+}
+
 // Developer notes:
 // `gradlew pmdMain` - analyzes production source code
 // `gradlew pmdTest` - analyzes test source code
@@ -150,6 +154,10 @@ pmd {
 
 	// Use the project-specific PMD ruleset.
 	ruleSetFiles = files('config/pmd/pmd-rules.xml')
+}
+
+tasks.withType(Pmd).configureEach {
+	exclude '**/com/example/hotelbooking/inventory/grpc/v1/**'
 }
 
 tasks.named('pmdMain') {

@@ -1,0 +1,79 @@
+syntax = "proto3";
+
+package inventory.v1;
+
+option java_multiple_files = true;
+option java_package = "com.example.hotelbooking.inventory.grpc.v1";
+option java_outer_classname = "InventoryServiceProto";
+
+service InventoryQueryService {
+  rpc FindRoomTypeReference(FindRoomTypeReferenceRequest)
+    returns (FindRoomTypeReferenceResponse);
+}
+
+service InventoryReservationService {
+  rpc PlaceHold(PlaceHoldRequest)
+    returns (PlaceHoldResponse);
+
+  rpc ConfirmHold(ConfirmHoldRequest)
+    returns (ConfirmHoldResponse);
+
+  rpc ReleaseHold(ReleaseHoldRequest)
+    returns (ReleaseHoldResponse);
+
+  rpc CancelConfirmedReservation(CancelConfirmedReservationRequest)
+    returns (CancelConfirmedReservationResponse);
+}
+
+message FindRoomTypeReferenceRequest {
+  string hotel_id = 1;
+  string room_type_id = 2;
+}
+
+message FindRoomTypeReferenceResponse {
+  bool found = 1;
+  RoomTypeReference room_type = 2;
+}
+
+message RoomTypeReference {
+  string hotel_id = 1;
+  string room_type_id = 2;
+  int32 guest_capacity = 3;
+}
+
+message PlaceHoldRequest {
+  string hotel_id = 1;
+  string room_type_id = 2;
+  string check_in = 3;
+  string check_out = 4;
+  int32 rooms = 5;
+}
+
+message PlaceHoldResponse {
+  string hold_id = 1;
+}
+
+message ConfirmHoldRequest {
+  string hold_id = 1;
+}
+
+message ConfirmHoldResponse {
+}
+
+message ReleaseHoldRequest {
+  string hold_id = 1;
+}
+
+message ReleaseHoldResponse {
+}
+
+message CancelConfirmedReservationRequest {
+  string hotel_id = 1;
+  string room_type_id = 2;
+  string check_in = 3;
+  string check_out = 4;
+  int32 rooms = 5;
+}
+
+message CancelConfirmedReservationResponse {
+}
