@@ -3,7 +3,7 @@ package com.example.hotelbooking.inventory.application.exception;
 import java.io.Serial;
 import java.util.UUID;
 
-public class RoomHoldNotFoundException extends RuntimeException {
+public class RoomHoldNotFoundException extends InventoryApplicationException {
 
   @Serial private static final long serialVersionUID = 1L;
 
