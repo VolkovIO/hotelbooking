@@ -9,9 +9,25 @@ spring:
       local-in-memory:
         - booking-in-memory
         - inventory-in-memory
+        - demo-in-memory
+        - inventory-direct-client
       local-mongo:
         - booking-in-memory
         - inventory-mongo
+        - inventory-direct-client
       local-postgres-mongo:
         - booking-postgres
         - inventory-mongo
+        - inventory-grpc-server
+        - inventory-grpc-client
+
+server:
+  port: 8080
+
+inventory:
+  grpc:
+    server:
+      port: 9090
+    client:
+      host: localhost
+      port: 9090

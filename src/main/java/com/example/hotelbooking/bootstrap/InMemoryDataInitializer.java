@@ -24,7 +24,7 @@ import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
-@Profile("in-memory")
+@Profile("demo-in-memory")
 @RequiredArgsConstructor
 public class InMemoryDataInitializer implements ApplicationRunner {
 
