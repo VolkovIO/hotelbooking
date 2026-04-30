@@ -6,9 +6,11 @@ import com.example.hotelbooking.inventory.application.port.in.InventoryQueryUseC
 import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 @Component
+@Profile("inventory-direct-client")
 @RequiredArgsConstructor
 final class InventoryLookupAclAdapter implements InventoryLookupPort {
 
