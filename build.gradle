@@ -4,7 +4,7 @@ import com.github.spotbugs.snom.Effort
 plugins {
 	id 'java'
 	id 'org.springframework.boot' version '3.5.13'
-	id 'io.spring.dependency-management' version '1.1.7'
+	id 'io.spring.dependency-management' version '1.1.7' apply false
 	id 'com.diffplug.spotless' version '8.4.0'
 	id 'checkstyle'
 	id 'pmd'
@@ -17,6 +17,7 @@ version = '0.3.0'
 
 ext {
 	versions = [
+			springBoot     : '3.5.13',
 			lombok        : '1.18.44',
 			springdoc     : '2.8.5',
 			protobuf      : '4.33.1',
@@ -29,6 +30,14 @@ allprojects {
 	repositories {
 		mavenCentral()
 		maven { url = 'https://repo.spring.io/snapshot' }
+	}
+
+	apply plugin: 'io.spring.dependency-management'
+
+	dependencyManagement {
+		imports {
+			mavenBom "org.springframework.boot:spring-boot-dependencies:${versions.springBoot}"
+		}
 	}
 }
 
@@ -44,6 +53,7 @@ repositories {
 
 dependencies {
 	implementation project(':modules:inventory-grpc-api')
+	implementation project(':modules:booking')
 
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
