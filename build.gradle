@@ -9,7 +9,7 @@ plugins {
 	id 'checkstyle'
 	id 'pmd'
 	id 'com.github.spotbugs' version '6.4.8'
-	id 'com.google.protobuf' version '0.9.5'
+	id 'com.google.protobuf' version '0.9.5' apply false
 }
 
 group = 'com.example'
@@ -25,6 +25,13 @@ ext {
 	]
 }
 
+allprojects {
+	repositories {
+		mavenCentral()
+		maven { url = 'https://repo.spring.io/snapshot' }
+	}
+}
+
 java {
 	toolchain {
 		languageVersion = JavaLanguageVersion.of(25)
@@ -36,6 +43,8 @@ repositories {
 }
 
 dependencies {
+	implementation project(':modules:inventory-grpc-api')
+
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-jdbc'
@@ -191,22 +200,4 @@ tasks.named('spotbugsMain') {
 
 	// Fail the build if SpotBugs finds violations in main code.
 	ignoreFailures = false
-}
-
-protobuf {
-	protoc {
-		artifact = "com.google.protobuf:protoc:${versions.protobuf}"
-	}
-	plugins {
-		grpc {
-			artifact = "io.grpc:protoc-gen-grpc-java:${versions.grpc}"
-		}
-	}
-	generateProtoTasks {
-		all().configureEach { task ->
-			task.plugins {
-				grpc {}
-			}
-		}
-	}
 }
