@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: booking-service
+  output:
+    ansi:
+      enabled: ALWAYS
+  profiles:
+    active:
+      - booking-postgres
+      - inventory-grpc-client
+  datasource:
+    url: jdbc:postgresql://localhost:5432/hotelbooking
+    username: hotelbooking
+    password: hotelbooking
+    driver-class-name: org.postgresql.Driver
+  liquibase:
+    enabled: true
+    change-log: classpath:/db/changelog/db.changelog-master.yaml
+
+server:
+  port: 8080
+
+inventory:
+  grpc:
+    client:
+      host: localhost
+      port: 9090
