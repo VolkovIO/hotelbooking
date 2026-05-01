@@ -39,11 +39,25 @@ allprojects {
 			mavenBom "org.springframework.boot:spring-boot-dependencies:${versions.springBoot}"
 		}
 	}
+
+	tasks.withType(JavaCompile).configureEach {
+		options.release = 21
+	}
+}
+
+subprojects {
+	apply plugin: 'java'
+
+	java {
+		toolchain {
+			languageVersion = JavaLanguageVersion.of(25)
+		}
+	}
 }
 
 java {
 	toolchain {
-		languageVersion = JavaLanguageVersion.of(25)
+		languageVersion = JavaLanguageVersion.of(21)
 	}
 }
 
@@ -54,6 +68,7 @@ repositories {
 dependencies {
 	implementation project(':modules:inventory-grpc-api')
 	implementation project(':modules:booking')
+	implementation project(':modules:inventory')
 
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
