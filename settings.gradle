@@ -5,3 +5,10 @@ pluginManagement {
 	}
 }
 rootProject.name = 'hotelbooking'
+
+include 'modules:booking'
+include 'modules:inventory'
+include 'modules:inventory-grpc-api'
+
+include 'apps:booking-service-app'
+include 'apps:inventory-service-app'

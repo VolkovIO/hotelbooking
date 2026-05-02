@@ -1,0 +1,21 @@
+spring:
+  application:
+    name: inventory-service
+  output:
+    ansi:
+      enabled: ALWAYS
+  profiles:
+    active:
+      - inventory-mongo
+      - inventory-grpc-server
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/hotelbooking}
+
+server:
+  port: 8081
+
+inventory:
+  grpc:
+    server:
+      port: 9090

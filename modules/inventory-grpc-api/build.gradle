@@ -1,0 +1,32 @@
+plugins {
+    id 'java-library'
+    id 'com.google.protobuf'
+}
+
+def versions = rootProject.ext.versions
+
+dependencies {
+    api "io.grpc:grpc-protobuf:${versions.grpc}"
+    api "io.grpc:grpc-stub:${versions.grpc}"
+    api "com.google.protobuf:protobuf-java:${versions.protobuf}"
+
+    compileOnly "javax.annotation:javax.annotation-api:${versions.javaxAnnotation}"
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:${versions.protobuf}"
+    }
+    plugins {
+        grpc {
+            artifact = "io.grpc:protoc-gen-grpc-java:${versions.grpc}"
+        }
+    }
+    generateProtoTasks {
+        all().configureEach { task ->
+            task.plugins {
+                grpc {}
+            }
+        }
+    }
+}
