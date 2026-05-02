@@ -11,8 +11,10 @@ import com.example.hotelbooking.inventory.domain.RoomAvailability;
 import java.time.LocalDate;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AdjustRoomCapacityService implements AdjustRoomCapacityUseCase {
@@ -22,6 +24,14 @@ public class AdjustRoomCapacityService implements AdjustRoomCapacityUseCase {
 
   @Override
   public void execute(RoomAvailabilityPeriodCommand command) {
+    log.info(
+        "Adjusting room capacity: hotelId={}, roomTypeId={}, startDate={}, endDate={}, totalRooms={}",
+        command.hotelId(),
+        command.roomTypeId(),
+        command.startDate(),
+        command.endDate(),
+        command.totalRooms());
+
     Hotel hotel =
         hotelRepository
             .findById(command.hotelId())
@@ -32,6 +42,14 @@ public class AdjustRoomCapacityService implements AdjustRoomCapacityUseCase {
     validateRangeExists(
         command.hotelId(), command.roomTypeId(), command.startDate(), command.endDate());
     adjustRange(
+        command.hotelId(),
+        command.roomTypeId(),
+        command.startDate(),
+        command.endDate(),
+        command.totalRooms());
+
+    log.info(
+        "Room capacity adjusted: hotelId={}, roomTypeId={}, startDate={}, endDate={}, totalRooms={}",
         command.hotelId(),
         command.roomTypeId(),
         command.startDate(),

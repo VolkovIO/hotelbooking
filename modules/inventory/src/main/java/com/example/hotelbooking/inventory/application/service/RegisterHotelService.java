@@ -5,8 +5,10 @@ import com.example.hotelbooking.inventory.application.port.in.RegisterHotelUseCa
 import com.example.hotelbooking.inventory.application.port.out.HotelRepository;
 import com.example.hotelbooking.inventory.domain.Hotel;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class RegisterHotelService implements RegisterHotelUseCase {
@@ -15,7 +17,18 @@ public class RegisterHotelService implements RegisterHotelUseCase {
 
   @Override
   public Hotel execute(RegisterHotelCommand command) {
+    log.info("Registering hotel: name={}, city={}", command.name(), command.city());
+
     Hotel hotel = Hotel.create(command.name(), command.city());
-    return hotelRepository.save(hotel);
+
+    Hotel saveHotel = hotelRepository.save(hotel);
+
+    log.info(
+        "Hotel registered: hotelId={}, name={}, city={}",
+        saveHotel.getId(),
+        saveHotel.getName(),
+        saveHotel.getCity());
+
+    return saveHotel;
   }
 }
