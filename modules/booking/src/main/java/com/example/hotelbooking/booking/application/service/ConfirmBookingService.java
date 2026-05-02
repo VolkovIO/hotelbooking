@@ -9,8 +9,10 @@ import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.booking.domain.BookingDomainException;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ConfirmBookingService implements ConfirmBookingUseCase {
@@ -20,6 +22,8 @@ public class ConfirmBookingService implements ConfirmBookingUseCase {
 
   @Override
   public Booking execute(ConfirmBookingCommand command) {
+    log.info("Confirming booking: bookingId={}", command.bookingId());
+
     Booking booking =
         bookingRepository
             .findById(command.bookingId())
@@ -31,8 +35,18 @@ public class ConfirmBookingService implements ConfirmBookingUseCase {
     }
 
     inventoryReservationPort.confirmHold(holdId);
+    log.debug(
+        "Inventory hold confirmed for booking: bookingId={}, holdId={}", booking.getId(), holdId);
+
     booking.confirmHeldBooking();
 
-    return bookingRepository.save(booking);
+    Booking savedBooking = bookingRepository.save(booking);
+
+    log.info(
+        "Booking confirmed: bookingId={}, status={}",
+        savedBooking.getId(),
+        savedBooking.getStatus());
+
+    return savedBooking;
   }
 }
