@@ -4,11 +4,13 @@ import com.example.hotelbooking.inventory.grpc.v1.InventoryQueryServiceGrpc;
 import com.example.hotelbooking.inventory.grpc.v1.InventoryReservationServiceGrpc;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
 
+@Slf4j
 @Configuration
 @Profile("inventory-grpc-client")
 public class BookingInventoryGrpcClientConfig {
@@ -17,6 +19,8 @@ public class BookingInventoryGrpcClientConfig {
   ManagedChannel inventoryManagedChannel(
       @Value("${inventory.grpc.client.host}") String host,
       @Value("${inventory.grpc.client.port}") int port) {
+    log.info("Creating inventory gRPC client channel: host={}, port={}", host, port);
+
     return ManagedChannelBuilder.forAddress(host, port).usePlaintext().build();
   }
 

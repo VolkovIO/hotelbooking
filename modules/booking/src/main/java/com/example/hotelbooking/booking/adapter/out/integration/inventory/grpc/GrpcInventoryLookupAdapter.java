@@ -8,9 +8,11 @@ import io.grpc.StatusRuntimeException;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
+@Slf4j
 @Component
 @Profile("inventory-grpc-client")
 @RequiredArgsConstructor
@@ -20,6 +22,11 @@ final class GrpcInventoryLookupAdapter implements InventoryLookupPort {
 
   @Override
   public Optional<RoomTypeReference> findRoomTypeReference(UUID hotelId, UUID roomTypeId) {
+    log.debug(
+        "Calling inventory gRPC FindRoomTypeReference: hotelId={}, roomTypeId={}",
+        hotelId,
+        roomTypeId);
+
     try {
       var response =
           inventoryQueryStub.findRoomTypeReference(
@@ -29,10 +36,21 @@ final class GrpcInventoryLookupAdapter implements InventoryLookupPort {
                   .build());
 
       if (!response.getFound()) {
+        log.debug(
+            "Inventory gRPC FindRoomTypeReference completed: found=false, hotelId={}, roomTypeId={}",
+            hotelId,
+            roomTypeId);
+
         return Optional.empty();
       }
 
       var roomType = response.getRoomType();
+
+      log.debug(
+          "Inventory gRPC FindRoomTypeReference completed: found=true, hotelId={}, roomTypeId={}, guestCapacity={}",
+          roomType.getHotelId(),
+          roomType.getRoomTypeId(),
+          roomType.getGuestCapacity());
 
       return Optional.of(
           new RoomTypeReference(

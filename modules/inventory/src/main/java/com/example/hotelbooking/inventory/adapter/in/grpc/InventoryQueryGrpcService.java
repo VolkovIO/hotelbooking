@@ -7,8 +7,10 @@ import com.example.hotelbooking.inventory.grpc.v1.InventoryQueryServiceGrpc;
 import com.example.hotelbooking.inventory.grpc.v1.RoomTypeReference;
 import io.grpc.stub.StreamObserver;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class InventoryQueryGrpcService
@@ -20,6 +22,11 @@ public class InventoryQueryGrpcService
   public void findRoomTypeReference(
       FindRoomTypeReferenceRequest request,
       StreamObserver<FindRoomTypeReferenceResponse> responseObserver) {
+    log.debug(
+        "Received inventory gRPC FindRoomTypeReference: hotelId={}, roomTypeId={}",
+        request.getHotelId(),
+        request.getRoomTypeId());
+
     InventoryGrpcExceptionMapper.handle(
         responseObserver,
         () ->
@@ -28,17 +35,31 @@ public class InventoryQueryGrpcService
                     InventoryGrpcMapper.toUuid(request.getHotelId(), "hotelId"),
                     InventoryGrpcMapper.toUuid(request.getRoomTypeId(), "roomTypeId"))
                 .map(
-                    result ->
-                        FindRoomTypeReferenceResponse.newBuilder()
-                            .setFound(true)
-                            .setRoomType(
-                                RoomTypeReference.newBuilder()
-                                    .setHotelId(result.hotelId().toString())
-                                    .setRoomTypeId(result.roomTypeId().toString())
-                                    .setGuestCapacity(result.guestCapacity())
-                                    .build())
-                            .build())
+                    result -> {
+                      log.debug(
+                          "Inventory gRPC FindRoomTypeReference found: hotelId={}, roomTypeId={}, guestCapacity={}",
+                          result.hotelId(),
+                          result.roomTypeId(),
+                          result.guestCapacity());
+
+                      return FindRoomTypeReferenceResponse.newBuilder()
+                          .setFound(true)
+                          .setRoomType(
+                              RoomTypeReference.newBuilder()
+                                  .setHotelId(result.hotelId().toString())
+                                  .setRoomTypeId(result.roomTypeId().toString())
+                                  .setGuestCapacity(result.guestCapacity())
+                                  .build())
+                          .build();
+                    })
                 .orElseGet(
-                    () -> FindRoomTypeReferenceResponse.newBuilder().setFound(false).build()));
+                    () -> {
+                      log.debug(
+                          "Inventory gRPC FindRoomTypeReference not found: hotelId={}, roomTypeId={}",
+                          request.getHotelId(),
+                          request.getRoomTypeId());
+
+                      return FindRoomTypeReferenceResponse.newBuilder().setFound(false).build();
+                    }));
   }
 }

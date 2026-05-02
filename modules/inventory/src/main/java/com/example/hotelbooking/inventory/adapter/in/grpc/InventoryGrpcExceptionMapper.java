@@ -5,7 +5,9 @@ import com.example.hotelbooking.inventory.domain.InventoryDomainException;
 import io.grpc.Status;
 import io.grpc.StatusRuntimeException;
 import io.grpc.stub.StreamObserver;
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
 final class InventoryGrpcExceptionMapper {
 
   private InventoryGrpcExceptionMapper() {}
@@ -16,10 +18,22 @@ final class InventoryGrpcExceptionMapper {
       responseObserver.onNext(response);
       responseObserver.onCompleted();
     } catch (InventoryApplicationException exception) {
+      log.warn(
+          "Inventory gRPC application error: errorType={}, message={}",
+          exception.getClass().getSimpleName(),
+          exception.getMessage());
       responseObserver.onError(toStatusRuntimeException(exception));
     } catch (InventoryDomainException exception) {
+      log.warn(
+          "Inventory gRPC domain error: errorType={}, message={}",
+          exception.getClass().getSimpleName(),
+          exception.getMessage());
       responseObserver.onError(toStatusRuntimeException(exception));
     } catch (StatusRuntimeException exception) {
+      log.warn(
+          "Inventory gRPC status error: status={}, description={}",
+          exception.getStatus().getCode(),
+          exception.getStatus().getDescription());
       responseObserver.onError(exception);
     }
   }
