@@ -13,8 +13,10 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class InventoryReservationService implements InventoryReservationUseCase {
@@ -27,6 +29,14 @@ public class InventoryReservationService implements InventoryReservationUseCase 
   @Override
   public UUID placeHold(
       UUID hotelId, UUID roomTypeId, LocalDate checkIn, LocalDate checkOut, int rooms) {
+    log.info(
+        "Placing inventory hold: hotelId={}, roomTypeId={}, checkIn={}, checkOut={}, rooms={}",
+        hotelId,
+        roomTypeId,
+        checkIn,
+        checkOut,
+        rooms);
+
     LocalDate availabilityTo = checkOut.minusDays(1);
 
     if (availabilityTo.isBefore(checkIn)) {
@@ -51,22 +61,47 @@ public class InventoryReservationService implements InventoryReservationUseCase 
     RoomHold roomHold = RoomHold.create(hotelId, roomTypeId, checkIn, checkOut, rooms);
     roomHoldRepository.save(roomHold);
 
+    log.info(
+        "Inventory hold placed: holdId={}, hotelId={}, roomTypeId={}, checkIn={}, checkOut={}, rooms={}",
+        roomHold.getId(),
+        hotelId,
+        roomTypeId,
+        checkIn,
+        checkOut,
+        rooms);
+
     return roomHold.getId();
   }
 
   @Override
   public void releaseHold(UUID holdId) {
+    log.info("Releasing inventory hold: holdId={}", holdId);
+
     releaseRoomHoldUseCase.execute(holdId);
+
+    log.info("Inventory hold released: holdId={}", holdId);
   }
 
   @Override
   public void confirmHold(UUID holdId) {
+    log.info("Confirming inventory hold: holdId={}", holdId);
+
     confirmRoomHoldUseCase.execute(holdId);
+
+    log.info("Inventory hold confirmed: holdId={}", holdId);
   }
 
   @Override
   public void cancelConfirmedReservation(
       UUID hotelId, UUID roomTypeId, LocalDate checkIn, LocalDate checkOut, int rooms) {
+    log.info(
+        "Cancelling confirmed inventory reservation: hotelId={}, roomTypeId={}, checkIn={}, checkOut={}, rooms={}",
+        hotelId,
+        roomTypeId,
+        checkIn,
+        checkOut,
+        rooms);
+
     LocalDate availabilityTo = checkOut.minusDays(1);
 
     if (availabilityTo.isBefore(checkIn)) {
@@ -88,5 +123,13 @@ public class InventoryReservationService implements InventoryReservationUseCase 
         availabilityList.stream().map(item -> item.releaseBookedRooms(rooms)).toList();
 
     roomAvailabilityRepository.saveAll(updatedAvailability);
+
+    log.info(
+        "Confirmed inventory reservation cancelled: hotelId={}, roomTypeId={}, checkIn={}, checkOut={}, rooms={}",
+        hotelId,
+        roomTypeId,
+        checkIn,
+        checkOut,
+        rooms);
   }
 }

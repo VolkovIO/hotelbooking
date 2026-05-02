@@ -9,8 +9,10 @@ import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.booking.domain.BookingDomainException;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CancelBookingService implements CancelBookingUseCase {
@@ -22,10 +24,17 @@ public class CancelBookingService implements CancelBookingUseCase {
 
   @Override
   public Booking execute(CancelBookingCommand command) {
+    log.info("Cancelling booking: bookingId={}", command.bookingId());
+
     Booking booking =
         bookingRepository
             .findById(command.bookingId())
             .orElseThrow(() -> new BookingNotFoundException(command.bookingId()));
+
+    log.debug(
+        "Booking cancellation flow selected: bookingId={}, currentStatus={}",
+        booking.getId(),
+        booking.getStatus());
 
     if (booking.isOnHold()) {
       cancelHeldBooking(booking);
@@ -35,7 +44,14 @@ public class CancelBookingService implements CancelBookingUseCase {
       throw new BookingDomainException("Only ON_HOLD or CONFIRMED booking can be cancelled");
     }
 
-    return bookingRepository.save(booking);
+    Booking savedBooking = bookingRepository.save(booking);
+
+    log.info(
+        "Booking cancelled: bookingId={}, status={}",
+        savedBooking.getId(),
+        savedBooking.getStatus());
+
+    return savedBooking;
   }
 
   private void cancelHeldBooking(Booking booking) {
@@ -45,6 +61,12 @@ public class CancelBookingService implements CancelBookingUseCase {
     }
 
     inventoryReservationPort.releaseHold(holdId);
+
+    log.debug(
+        "Inventory hold released for cancelled booking: bookingId={}, holdId={}",
+        booking.getId(),
+        holdId);
+
     booking.cancelHeldBooking();
   }
 

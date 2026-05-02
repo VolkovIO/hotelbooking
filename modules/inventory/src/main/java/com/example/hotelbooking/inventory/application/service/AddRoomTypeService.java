@@ -6,8 +6,10 @@ import com.example.hotelbooking.inventory.application.port.in.AddRoomTypeUseCase
 import com.example.hotelbooking.inventory.application.port.out.HotelRepository;
 import com.example.hotelbooking.inventory.domain.Hotel;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AddRoomTypeService implements AddRoomTypeUseCase {
@@ -16,6 +18,12 @@ public class AddRoomTypeService implements AddRoomTypeUseCase {
 
   @Override
   public Hotel execute(AddRoomTypeCommand command) {
+    log.info(
+        "Adding room type: hotelId={}, roomTypeName={}, guestCapacity={}",
+        command.hotelId(),
+        command.name(),
+        command.guestCapacity());
+
     Hotel hotel =
         hotelRepository
             .findById(command.hotelId())
@@ -23,6 +31,14 @@ public class AddRoomTypeService implements AddRoomTypeUseCase {
 
     hotel.addRoomType(command.name(), command.guestCapacity());
 
-    return hotelRepository.save(hotel);
+    Hotel saveHotel = hotelRepository.save(hotel);
+
+    log.info(
+        "Room type added: hotelId={}, roomTypeName={}, guestCapacity={}",
+        saveHotel.getId(),
+        command.name(),
+        command.guestCapacity());
+
+    return saveHotel;
   }
 }

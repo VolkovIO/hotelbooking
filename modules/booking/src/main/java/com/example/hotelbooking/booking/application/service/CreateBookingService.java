@@ -12,8 +12,10 @@ import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.booking.domain.StayPeriod;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CreateBookingService implements CreateBookingUseCase {
@@ -24,6 +26,14 @@ public class CreateBookingService implements CreateBookingUseCase {
 
   @Override
   public Booking execute(CreateBookingCommand command) {
+    log.info(
+        "Creating booking: hotelId={}, roomTypeId={}, checkIn={}, checkOut={}, guestCount={}",
+        command.hotelId(),
+        command.roomTypeId(),
+        command.checkIn(),
+        command.checkOut(),
+        command.guestCount());
+
     final StayPeriod stayPeriod = new StayPeriod(command.checkIn(), command.checkOut());
 
     RoomTypeReference roomTypeReference =
@@ -34,6 +44,12 @@ public class CreateBookingService implements CreateBookingUseCase {
                     new RoomTypeReferenceNotFoundException(
                         command.hotelId(), command.roomTypeId()));
 
+    log.debug(
+        "Room type reference found for booking: hotelId={}, roomTypeId={}, guestCapacity={}",
+        roomTypeReference.hotelId(),
+        roomTypeReference.roomTypeId(),
+        roomTypeReference.guestCapacity());
+
     if (command.guestCount() > roomTypeReference.guestCapacity()) {
       throw new GuestCountExceedsRoomCapacityException(
           command.guestCount(), roomTypeReference.guestCapacity());
@@ -43,11 +59,23 @@ public class CreateBookingService implements CreateBookingUseCase {
         inventoryReservationPort.placeHold(
             command.hotelId(), command.roomTypeId(), command.checkIn(), command.checkOut(), 1);
 
+    log.debug("Inventory hold placed for booking: holdId={}", holdId);
+
     Booking booking =
         Booking.create(command.hotelId(), command.roomTypeId(), stayPeriod, command.guestCount());
 
     booking.placeOnHold(holdId);
 
-    return bookingRepository.save(booking);
+    Booking savedBooking = bookingRepository.save(booking);
+
+    log.info(
+        "Booking created: bookingId={}, hotelId={}, roomTypeId={}, status={}, holdId={}",
+        savedBooking.getId(),
+        savedBooking.getHotelId(),
+        savedBooking.getRoomTypeId(),
+        savedBooking.getStatus(),
+        savedBooking.getHoldId());
+
+    return savedBooking;
   }
 }

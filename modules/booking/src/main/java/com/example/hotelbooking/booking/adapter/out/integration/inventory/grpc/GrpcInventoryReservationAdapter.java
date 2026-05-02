@@ -62,6 +62,8 @@ final class GrpcInventoryReservationAdapter implements InventoryReservationPort 
     try {
       inventoryReservationStub.releaseHold(
           ReleaseHoldRequest.newBuilder().setHoldId(holdId.toString()).build());
+
+      log.debug("Inventory gRPC ReleaseHold completed: holdId={}", holdId);
     } catch (StatusRuntimeException exception) {
       throw BookingInventoryGrpcExceptionMapper.inventoryCallFailed(
           "release room hold: " + holdId, exception);
@@ -75,6 +77,8 @@ final class GrpcInventoryReservationAdapter implements InventoryReservationPort 
     try {
       inventoryReservationStub.confirmHold(
           ConfirmHoldRequest.newBuilder().setHoldId(holdId.toString()).build());
+
+      log.debug("Inventory gRPC ConfirmHold completed: holdId={}", holdId);
     } catch (StatusRuntimeException exception) {
       throw BookingInventoryGrpcExceptionMapper.inventoryCallFailed(
           "confirm room hold: " + holdId, exception);
@@ -85,7 +89,8 @@ final class GrpcInventoryReservationAdapter implements InventoryReservationPort 
   public void cancelConfirmedReservation(
       UUID hotelId, UUID roomTypeId, LocalDate checkIn, LocalDate checkOut, int rooms) {
     log.debug(
-        "Call inventory gRPC CancelConfirmedReservation: hotelId={}, roomTypeId={}, checkIn={}, checkOut={}, rooms={}",
+        "Calling inventory gRPC CancelConfirmedReservation: "
+            + "hotelId={}, roomTypeId={}, checkIn={}, checkOut={}, rooms={}",
         hotelId,
         roomTypeId,
         checkIn,
@@ -101,6 +106,15 @@ final class GrpcInventoryReservationAdapter implements InventoryReservationPort 
               .setCheckOut(checkOut.toString())
               .setRooms(rooms)
               .build());
+
+      log.debug(
+          "Inventory gRPC CancelConfirmedReservation completed: "
+              + "hotelId={}, roomTypeId={}, checkIn={}, checkOut={}, rooms={}",
+          hotelId,
+          roomTypeId,
+          checkIn,
+          checkOut,
+          rooms);
     } catch (StatusRuntimeException exception) {
       throw BookingInventoryGrpcExceptionMapper.inventoryCallFailed(
           "cancel confirmed reservation for hotel %s and room type %s"
