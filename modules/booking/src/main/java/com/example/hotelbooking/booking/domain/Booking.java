@@ -9,6 +9,7 @@ import lombok.Getter;
 public final class Booking {
 
   private final BookingId id;
+  private final UserId userId;
   private final UUID hotelId;
   private final UUID roomTypeId;
   private final StayPeriod stayPeriod;
@@ -19,6 +20,7 @@ public final class Booking {
 
   private Booking(
       BookingId id,
+      UserId userId,
       UUID hotelId,
       UUID roomTypeId,
       StayPeriod stayPeriod,
@@ -27,6 +29,7 @@ public final class Booking {
       UUID holdId) {
 
     this.id = Objects.requireNonNull(id, "id must not be null");
+    this.userId = Objects.requireNonNull(userId, "userId must not be null");
     this.hotelId = Objects.requireNonNull(hotelId, "hotelId must not be null");
     this.roomTypeId = Objects.requireNonNull(roomTypeId, "roomTypeId must not be null");
     this.stayPeriod = Objects.requireNonNull(stayPeriod, "stayPeriod must not be null");
@@ -36,13 +39,21 @@ public final class Booking {
   }
 
   public static Booking create(
-      UUID hotelId, UUID roomTypeId, StayPeriod stayPeriod, int guestCount) {
+      UserId userId, UUID hotelId, UUID roomTypeId, StayPeriod stayPeriod, int guestCount) {
     return new Booking(
-        BookingId.newId(), hotelId, roomTypeId, stayPeriod, guestCount, BookingStatus.NEW, null);
+        BookingId.newId(),
+        userId,
+        hotelId,
+        roomTypeId,
+        stayPeriod,
+        guestCount,
+        BookingStatus.NEW,
+        null);
   }
 
   public static Booking restore(
       BookingId id,
+      UserId userId,
       UUID hotelId,
       UUID roomTypeId,
       StayPeriod stayPeriod,
@@ -52,7 +63,7 @@ public final class Booking {
 
     validateRestoredHoldState(status, holdId);
 
-    return new Booking(id, hotelId, roomTypeId, stayPeriod, guestCount, status, holdId);
+    return new Booking(id, userId, hotelId, roomTypeId, stayPeriod, guestCount, status, holdId);
   }
 
   public void placeOnHold(UUID holdId) {
@@ -106,6 +117,10 @@ public final class Booking {
 
     this.status = BookingStatus.CANCELLED;
     this.holdId = null;
+  }
+
+  public boolean isOwnedBy(UserId userId) {
+    return this.userId.equals(Objects.requireNonNull(userId, "userId must not be null"));
   }
 
   private static int requirePositive(int value, String message) {

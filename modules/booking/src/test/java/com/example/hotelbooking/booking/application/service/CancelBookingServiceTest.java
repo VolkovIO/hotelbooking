@@ -10,6 +10,7 @@ import com.example.hotelbooking.booking.application.port.out.InventoryReservatio
 import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.booking.domain.BookingStatus;
 import com.example.hotelbooking.booking.domain.StayPeriod;
+import com.example.hotelbooking.booking.domain.UserId;
 import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
@@ -57,6 +58,7 @@ class CancelBookingServiceTest {
   private Booking confirmedBooking() {
     Booking booking =
         Booking.create(
+            userId(),
             UUID.randomUUID(),
             UUID.randomUUID(),
             new StayPeriod(LocalDate.of(2030, 6, 10), LocalDate.of(2030, 6, 20)),
@@ -66,5 +68,9 @@ class CancelBookingServiceTest {
     booking.confirmHeldBooking();
 
     return booking;
+  }
+
+  private UserId userId() {
+    return new UserId(UUID.fromString("00000000-0000-0000-0000-000000000001"));
   }
 }

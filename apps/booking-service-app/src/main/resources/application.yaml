@@ -8,6 +8,7 @@ spring:
     active:
       - booking-postgres
       - inventory-grpc-client
+      - security-dev
   datasource:
     url: jdbc:postgresql://localhost:5432/hotelbooking
     username: hotelbooking

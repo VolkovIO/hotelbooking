@@ -14,6 +14,12 @@ databaseChangeLog:
                     nullable: false
 
               - column:
+                  name: user_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+
+              - column:
                   name: hotel_id
                   type: uuid
                   constraints:
@@ -55,39 +61,35 @@ databaseChangeLog:
 
               - column:
                   name: created_at
-                  type: timestamp with time zone
+                  type: timestamp
                   defaultValueComputed: CURRENT_TIMESTAMP
                   constraints:
                     nullable: false
 
               - column:
                   name: updated_at
-                  type: timestamp with time zone
+                  type: timestamp
                   defaultValueComputed: CURRENT_TIMESTAMP
                   constraints:
                     nullable: false
 
         - createIndex:
             tableName: bookings
-            indexName: ix_bookings_status
+            indexName: ix_bookings_user_id
             columns:
               - column:
-                  name: status
+                  name: user_id
 
         - createIndex:
             tableName: bookings
-            indexName: ix_bookings_hotel_room_type
+            indexName: ix_bookings_hotel_id
             columns:
               - column:
                   name: hotel_id
-              - column:
-                  name: room_type_id
 
         - createIndex:
             tableName: bookings
-            indexName: ix_bookings_stay_period
+            indexName: ix_bookings_room_type_id
             columns:
               - column:
-                  name: check_in
-              - column:
-                  name: check_out
+                  name: room_type_id
