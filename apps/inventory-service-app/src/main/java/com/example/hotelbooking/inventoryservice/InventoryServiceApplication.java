@@ -4,7 +4,11 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.data.mongodb.repository.config.EnableMongoRepositories;
 
-@SpringBootApplication(scanBasePackages = "com.example.hotelbooking.inventory")
+@SpringBootApplication(
+    scanBasePackages = {
+      "com.example.hotelbooking.inventory",
+      "com.example.hotelbooking.inventoryservice"
+    })
 @EnableMongoRepositories(
     basePackages = "com.example.hotelbooking.inventory.adapter.out.persistence.mongo")
 public class InventoryServiceApplication {
