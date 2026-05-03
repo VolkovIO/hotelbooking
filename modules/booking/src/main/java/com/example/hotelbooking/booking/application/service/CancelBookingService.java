@@ -1,6 +1,7 @@
 package com.example.hotelbooking.booking.application.service;
 
 import com.example.hotelbooking.booking.application.command.CancelBookingCommand;
+import com.example.hotelbooking.booking.application.exception.BookingAccessDeniedException;
 import com.example.hotelbooking.booking.application.exception.BookingNotFoundException;
 import com.example.hotelbooking.booking.application.port.in.CancelBookingUseCase;
 import com.example.hotelbooking.booking.application.port.out.BookingRepository;
@@ -30,6 +31,10 @@ public class CancelBookingService implements CancelBookingUseCase {
         bookingRepository
             .findById(command.bookingId())
             .orElseThrow(() -> new BookingNotFoundException(command.bookingId()));
+
+    if (!booking.isOwnedBy(command.userId())) {
+      throw new BookingAccessDeniedException(command.bookingId());
+    }
 
     log.debug(
         "Booking cancellation flow selected: bookingId={}, currentStatus={}",

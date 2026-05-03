@@ -7,6 +7,7 @@ import com.example.hotelbooking.booking.application.port.in.CancelBookingUseCase
 import com.example.hotelbooking.booking.application.port.in.ConfirmBookingUseCase;
 import com.example.hotelbooking.booking.application.port.in.CreateBookingUseCase;
 import com.example.hotelbooking.booking.application.port.in.GetBookingByIdUseCase;
+import com.example.hotelbooking.booking.application.query.GetBookingByIdQuery;
 import com.example.hotelbooking.booking.application.security.CurrentUserProvider;
 import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.booking.domain.BookingId;
@@ -71,7 +72,11 @@ public class BookingController {
           """)
   @GetMapping("/{bookingId}")
   public BookingResponse getById(@PathVariable String bookingId) {
-    Booking booking = getBookingByIdUseCase.execute(BookingId.from(bookingId));
+    Booking booking =
+        getBookingByIdUseCase.execute(
+            new GetBookingByIdQuery(
+                BookingId.from(bookingId), currentUserProvider.currentUser().userId()));
+
     return BookingResponse.from(booking);
   }
 
@@ -87,7 +92,10 @@ public class BookingController {
   @PostMapping("/{bookingId}/cancel")
   public BookingResponse cancel(@PathVariable String bookingId) {
     Booking booking =
-        cancelBookingUseCase.execute(new CancelBookingCommand(BookingId.from(bookingId)));
+        cancelBookingUseCase.execute(
+            new CancelBookingCommand(
+                BookingId.from(bookingId), currentUserProvider.currentUser().userId()));
+
     return BookingResponse.from(booking);
   }
 
@@ -102,7 +110,10 @@ public class BookingController {
   @PostMapping("/{bookingId}/confirm")
   public BookingResponse confirm(@PathVariable String bookingId) {
     Booking booking =
-        confirmBookingUseCase.execute(new ConfirmBookingCommand(BookingId.from(bookingId)));
+        confirmBookingUseCase.execute(
+            new ConfirmBookingCommand(
+                BookingId.from(bookingId), currentUserProvider.currentUser().userId()));
+
     return BookingResponse.from(booking);
   }
 }

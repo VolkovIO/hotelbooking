@@ -1,5 +1,6 @@
 package com.example.hotelbooking.booking.adapter.in.web;
 
+import com.example.hotelbooking.booking.application.exception.BookingAccessDeniedException;
 import com.example.hotelbooking.booking.application.exception.BookingNotFoundException;
 import com.example.hotelbooking.booking.application.exception.RoomHoldFailedException;
 import com.example.hotelbooking.booking.domain.BookingDomainException;
@@ -70,6 +71,15 @@ public class BookingExceptionHandler {
     return BookingApiErrorResponse.of(
         HttpStatus.BAD_REQUEST.value(),
         HttpStatus.BAD_REQUEST.getReasonPhrase(),
+        exception.getMessage());
+  }
+
+  @ExceptionHandler(BookingAccessDeniedException.class)
+  @ResponseStatus(HttpStatus.FORBIDDEN)
+  public BookingApiErrorResponse handleBookingAccessDenied(BookingAccessDeniedException exception) {
+    return BookingApiErrorResponse.of(
+        HttpStatus.FORBIDDEN.value(),
+        HttpStatus.FORBIDDEN.getReasonPhrase(),
         exception.getMessage());
   }
 }
