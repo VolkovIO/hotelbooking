@@ -3,21 +3,27 @@ package com.example.hotelbooking.bookingservice.security;
 import com.example.hotelbooking.booking.application.security.CurrentUser;
 import com.example.hotelbooking.booking.application.security.CurrentUserProvider;
 import com.example.hotelbooking.booking.application.security.UserRole;
-import com.example.hotelbooking.booking.domain.UserId;
+import com.example.hotelbooking.bookingservice.security.account.UserAccount;
+import com.example.hotelbooking.bookingservice.security.account.UserAccountService;
+import com.example.hotelbooking.bookingservice.security.account.UserIdentityProvider;
 import java.util.Set;
-import java.util.UUID;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 @Component
 @Profile("security-dev")
+@RequiredArgsConstructor
 public class DevCurrentUserProvider implements CurrentUserProvider {
 
-  private static final UserId DEV_USER_ID =
-      new UserId(UUID.fromString("00000000-0000-0000-0000-000000000001"));
+  private final UserAccountService userAccountService;
 
   @Override
   public CurrentUser currentUser() {
-    return new CurrentUser(DEV_USER_ID, Set.of(UserRole.USER, UserRole.ADMIN));
+    UserAccount userAccount =
+        userAccountService.findOrCreate(
+            UserIdentityProvider.DEV, "dev-user", "dev@example.com", "Development User");
+
+    return new CurrentUser(userAccount.id(), Set.of(UserRole.USER, UserRole.ADMIN));
   }
 }

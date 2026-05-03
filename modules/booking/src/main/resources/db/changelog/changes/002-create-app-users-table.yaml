@@ -1,0 +1,66 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-create-app-users-table
+      author: volkovself
+      changes:
+        - createTable:
+            tableName: app_users
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: provider
+                  type: varchar(32)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: provider_subject
+                  type: varchar(255)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: email
+                  type: varchar(320)
+
+              - column:
+                  name: display_name
+                  type: varchar(255)
+
+              - column:
+                  name: role
+                  type: varchar(32)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: created_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: updated_at
+                  type: timestamp
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+
+        - addUniqueConstraint:
+            tableName: app_users
+            columnNames: provider, provider_subject
+            constraintName: uk_app_users_provider_subject
+
+        - createIndex:
+            tableName: app_users
+            indexName: ix_app_users_email
+            columns:
+              - column:
+                  name: email
