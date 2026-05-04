@@ -394,6 +394,37 @@ inventory-service
   -> exposes internal gRPC operations
 ```
 
+## Manual verification
+
+The security flow was manually verified with real Google ID tokens obtained through OAuth 2.0 Playground.
+
+Verified booking-service behavior:
+
+```text
+Valid Google ID token
+  -> accepted by booking-service-app in security-jwt profile
+  -> mapped to local app_users record
+  -> used as internal Booking.userId
+
+Verified ownership behavior:
+User A
+  -> can create booking
+  -> can read own booking
+  -> can cancel own booking
+User B
+  -> cannot read User A booking
+  -> cannot cancel User A booking
+  -> receives 403 Forbidden
+
+Verified inventory-service behavior in security-jwt profile:
+No token
+  -> 401 Unauthorized
+Fake JWT
+  -> 401 Unauthorized
+Valid Google ID token without ADMIN role
+  -> 403 Forbidden for /api/v1/admin/**
+```  
+
 ## Current limitations
 
 The current implementation is still educational.
