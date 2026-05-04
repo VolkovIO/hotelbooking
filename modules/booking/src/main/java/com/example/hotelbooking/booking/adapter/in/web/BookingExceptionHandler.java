@@ -6,12 +6,14 @@ import com.example.hotelbooking.booking.application.exception.RoomHoldFailedExce
 import com.example.hotelbooking.booking.domain.BookingDomainException;
 import jakarta.validation.ConstraintViolationException;
 import java.util.List;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+@Slf4j
 @RestControllerAdvice(basePackageClasses = BookingController.class)
 public class BookingExceptionHandler {
 
@@ -77,6 +79,8 @@ public class BookingExceptionHandler {
   @ExceptionHandler(BookingAccessDeniedException.class)
   @ResponseStatus(HttpStatus.FORBIDDEN)
   public BookingApiErrorResponse handleBookingAccessDenied(BookingAccessDeniedException exception) {
+    log.warn("Booking access denied: message={}", exception.getMessage());
+
     return BookingApiErrorResponse.of(
         HttpStatus.FORBIDDEN.value(),
         HttpStatus.FORBIDDEN.getReasonPhrase(),

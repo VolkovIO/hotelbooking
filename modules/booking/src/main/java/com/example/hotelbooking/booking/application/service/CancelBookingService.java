@@ -25,7 +25,10 @@ public class CancelBookingService implements CancelBookingUseCase {
 
   @Override
   public Booking execute(CancelBookingCommand command) {
-    log.info("Cancelling booking: bookingId={}", command.bookingId());
+    log.info(
+        "Cancelling booking requested: bookingId={}, userId={}",
+        command.bookingId(),
+        command.userId());
 
     Booking booking =
         bookingRepository
@@ -52,8 +55,9 @@ public class CancelBookingService implements CancelBookingUseCase {
     Booking savedBooking = bookingRepository.save(booking);
 
     log.info(
-        "Booking cancelled: bookingId={}, status={}",
+        "Booking cancelled: bookingId={}, userId={}, status={}",
         savedBooking.getId(),
+        command.userId(),
         savedBooking.getStatus());
 
     return savedBooking;

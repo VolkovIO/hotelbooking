@@ -1,5 +1,6 @@
 package com.example.hotelbooking.booking.application.service;
 
+import com.example.hotelbooking.booking.application.exception.BookingAccessDeniedException;
 import com.example.hotelbooking.booking.application.exception.BookingNotFoundException;
 import com.example.hotelbooking.booking.application.port.in.GetBookingByIdUseCase;
 import com.example.hotelbooking.booking.application.port.out.BookingRepository;
@@ -24,6 +25,10 @@ public class GetBookingByIdService implements GetBookingByIdUseCase {
         bookingRepository
             .findById(query.bookingId())
             .orElseThrow(() -> new BookingNotFoundException(query.bookingId()));
+
+    if (!booking.isOwnedBy(query.userId())) {
+      throw new BookingAccessDeniedException(query.bookingId());
+    }
 
     log.debug("Booking found: bookingId={}, status={}", booking.getId(), booking.getStatus());
 
