@@ -7,3 +7,8 @@ spring:
       resourceserver:
         jwt:
           issuer-uri: https://accounts.google.com
+
+app:
+  security:
+    google:
+      audience: 683052581411-8ohf98bkqi1sjhr89hpfc82eruedm3hu.apps.googleusercontent.com
