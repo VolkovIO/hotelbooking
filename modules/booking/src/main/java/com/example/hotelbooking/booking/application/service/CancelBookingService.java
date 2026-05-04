@@ -1,6 +1,7 @@
 package com.example.hotelbooking.booking.application.service;
 
 import com.example.hotelbooking.booking.application.command.CancelBookingCommand;
+import com.example.hotelbooking.booking.application.exception.BookingAccessDeniedException;
 import com.example.hotelbooking.booking.application.exception.BookingNotFoundException;
 import com.example.hotelbooking.booking.application.port.in.CancelBookingUseCase;
 import com.example.hotelbooking.booking.application.port.out.BookingRepository;
@@ -24,12 +25,19 @@ public class CancelBookingService implements CancelBookingUseCase {
 
   @Override
   public Booking execute(CancelBookingCommand command) {
-    log.info("Cancelling booking: bookingId={}", command.bookingId());
+    log.info(
+        "Cancelling booking requested: bookingId={}, userId={}",
+        command.bookingId(),
+        command.userId());
 
     Booking booking =
         bookingRepository
             .findById(command.bookingId())
             .orElseThrow(() -> new BookingNotFoundException(command.bookingId()));
+
+    if (!booking.isOwnedBy(command.userId())) {
+      throw new BookingAccessDeniedException(command.bookingId());
+    }
 
     log.debug(
         "Booking cancellation flow selected: bookingId={}, currentStatus={}",
@@ -47,8 +55,9 @@ public class CancelBookingService implements CancelBookingUseCase {
     Booking savedBooking = bookingRepository.save(booking);
 
     log.info(
-        "Booking cancelled: bookingId={}, status={}",
+        "Booking cancelled: bookingId={}, userId={}, status={}",
         savedBooking.getId(),
+        command.userId(),
         savedBooking.getStatus());
 
     return savedBooking;

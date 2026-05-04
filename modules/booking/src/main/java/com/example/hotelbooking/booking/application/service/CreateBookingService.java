@@ -27,7 +27,8 @@ public class CreateBookingService implements CreateBookingUseCase {
   @Override
   public Booking execute(CreateBookingCommand command) {
     log.info(
-        "Creating booking: hotelId={}, roomTypeId={}, checkIn={}, checkOut={}, guestCount={}",
+        "Creating booking: userId={}, hotelId={}, roomTypeId={}, checkIn={}, checkOut={}, guestCount={}",
+        command.userId(),
         command.hotelId(),
         command.roomTypeId(),
         command.checkIn(),
@@ -62,15 +63,21 @@ public class CreateBookingService implements CreateBookingUseCase {
     log.debug("Inventory hold placed for booking: holdId={}", holdId);
 
     Booking booking =
-        Booking.create(command.hotelId(), command.roomTypeId(), stayPeriod, command.guestCount());
+        Booking.create(
+            command.userId(),
+            command.hotelId(),
+            command.roomTypeId(),
+            stayPeriod,
+            command.guestCount());
 
     booking.placeOnHold(holdId);
 
     Booking savedBooking = bookingRepository.save(booking);
 
     log.info(
-        "Booking created: bookingId={}, hotelId={}, roomTypeId={}, status={}, holdId={}",
+        "Booking created: bookingId={}, userId={}, hotelId={}, roomTypeId={}, status={}, holdId={}",
         savedBooking.getId(),
+        savedBooking.getUserId(),
         savedBooking.getHotelId(),
         savedBooking.getRoomTypeId(),
         savedBooking.getStatus(),

@@ -5,6 +5,7 @@ import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.booking.domain.BookingId;
 import com.example.hotelbooking.booking.domain.BookingStatus;
 import com.example.hotelbooking.booking.domain.StayPeriod;
+import com.example.hotelbooking.booking.domain.UserId;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Optional;
@@ -42,6 +43,7 @@ class JdbcBookingRepository implements BookingRepository {
         .sql(
             """
             select id,
+                   user_id,
                    hotel_id,
                    room_type_id,
                    check_in,
@@ -63,6 +65,7 @@ class JdbcBookingRepository implements BookingRepository {
             """
             insert into bookings (
                 id,
+                user_id,
                 hotel_id,
                 room_type_id,
                 check_in,
@@ -73,6 +76,7 @@ class JdbcBookingRepository implements BookingRepository {
             )
             values (
                 :id,
+                :userId,
                 :hotelId,
                 :roomTypeId,
                 :checkIn,
@@ -83,6 +87,7 @@ class JdbcBookingRepository implements BookingRepository {
             )
             """)
         .param("id", booking.getId().value())
+        .param("userId", booking.getUserId().value())
         .param("hotelId", booking.getHotelId())
         .param("roomTypeId", booking.getRoomTypeId())
         .param("checkIn", booking.getStayPeriod().checkIn())
@@ -98,7 +103,8 @@ class JdbcBookingRepository implements BookingRepository {
         .sql(
             """
             update bookings
-               set hotel_id = :hotelId,
+               set user_id = :userId,
+                   hotel_id = :hotelId,
                    room_type_id = :roomTypeId,
                    check_in = :checkIn,
                    check_out = :checkOut,
@@ -109,6 +115,7 @@ class JdbcBookingRepository implements BookingRepository {
              where id = :id
             """)
         .param("id", booking.getId().value())
+        .param("userId", booking.getUserId().value())
         .param("hotelId", booking.getHotelId())
         .param("roomTypeId", booking.getRoomTypeId())
         .param("checkIn", booking.getStayPeriod().checkIn())
@@ -125,6 +132,7 @@ class JdbcBookingRepository implements BookingRepository {
 
     return Booking.restore(
         new BookingId(resultSet.getObject("id", UUID.class)),
+        new UserId(resultSet.getObject("user_id", UUID.class)),
         resultSet.getObject("hotel_id", UUID.class),
         resultSet.getObject("room_type_id", UUID.class),
         new StayPeriod(

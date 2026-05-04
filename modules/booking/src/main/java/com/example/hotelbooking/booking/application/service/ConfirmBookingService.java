@@ -1,6 +1,7 @@
 package com.example.hotelbooking.booking.application.service;
 
 import com.example.hotelbooking.booking.application.command.ConfirmBookingCommand;
+import com.example.hotelbooking.booking.application.exception.BookingAccessDeniedException;
 import com.example.hotelbooking.booking.application.exception.BookingNotFoundException;
 import com.example.hotelbooking.booking.application.port.in.ConfirmBookingUseCase;
 import com.example.hotelbooking.booking.application.port.out.BookingRepository;
@@ -28,6 +29,10 @@ public class ConfirmBookingService implements ConfirmBookingUseCase {
         bookingRepository
             .findById(command.bookingId())
             .orElseThrow(() -> new BookingNotFoundException(command.bookingId()));
+
+    if (!booking.isOwnedBy(command.userId())) {
+      throw new BookingAccessDeniedException(command.bookingId());
+    }
 
     UUID holdId = booking.getHoldId();
     if (holdId == null) {

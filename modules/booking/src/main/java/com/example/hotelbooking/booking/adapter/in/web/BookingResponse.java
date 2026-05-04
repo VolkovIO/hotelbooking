@@ -11,6 +11,10 @@ public record BookingResponse(
             description = "Unique booking identifier",
             example = "d290f1ee-6c54-4b01-90e6-d701748f0851")
         UUID bookingId,
+    @Schema(
+            description = "Booking owner user identifier",
+            example = "00000000-0000-0000-0000-000000000001")
+        UUID userId,
     @Schema(description = "Hotel identifier", example = "550e8400-e29b-41d4-a716-446655440000")
         UUID hotelId,
     @Schema(description = "Room type identifier", example = "660e8400-e29b-41d4-a716-446655440000")
@@ -23,6 +27,7 @@ public record BookingResponse(
   public static BookingResponse from(Booking booking) {
     return new BookingResponse(
         booking.getId().value(),
+        booking.getUserId().value(),
         booking.getHotelId(),
         booking.getRoomTypeId(),
         booking.getStayPeriod().checkIn(),

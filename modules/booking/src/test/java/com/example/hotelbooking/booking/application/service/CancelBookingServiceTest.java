@@ -1,15 +1,19 @@
 package com.example.hotelbooking.booking.application.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.example.hotelbooking.booking.application.command.CancelBookingCommand;
+import com.example.hotelbooking.booking.application.exception.BookingAccessDeniedException;
 import com.example.hotelbooking.booking.application.port.out.BookingRepository;
 import com.example.hotelbooking.booking.application.port.out.InventoryReservationPort;
 import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.booking.domain.BookingStatus;
 import com.example.hotelbooking.booking.domain.StayPeriod;
+import com.example.hotelbooking.booking.domain.UserId;
 import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
@@ -40,7 +44,7 @@ class CancelBookingServiceTest {
     when(bookingRepository.findById(booking.getId())).thenReturn(Optional.of(booking));
     when(bookingRepository.save(booking)).thenReturn(booking);
 
-    Booking result = service.execute(new CancelBookingCommand(booking.getId()));
+    Booking result = service.execute(new CancelBookingCommand(booking.getId(), userId()));
 
     assertEquals(BookingStatus.CANCELLED, result.getStatus());
 
@@ -54,9 +58,34 @@ class CancelBookingServiceTest {
     verify(bookingRepository).save(booking);
   }
 
+  @Test
+  void shouldRejectCancellingBookingOwnedByAnotherUser() {
+    UserId ownerId = new UserId(UUID.fromString("00000000-0000-0000-0000-000000000001"));
+    UserId anotherUserId = new UserId(UUID.fromString("00000000-0000-0000-0000-000000000002"));
+
+    Booking booking =
+        Booking.create(
+            ownerId,
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            new StayPeriod(LocalDate.of(2030, 6, 10), LocalDate.of(2030, 6, 20)),
+            2);
+
+    booking.placeOnHold(UUID.randomUUID());
+
+    when(bookingRepository.findById(booking.getId())).thenReturn(Optional.of(booking));
+
+    assertThrows(
+        BookingAccessDeniedException.class,
+        () -> service.execute(new CancelBookingCommand(booking.getId(), anotherUserId)));
+
+    verifyNoInteractions(inventoryReservationPort);
+  }
+
   private Booking confirmedBooking() {
     Booking booking =
         Booking.create(
+            userId(),
             UUID.randomUUID(),
             UUID.randomUUID(),
             new StayPeriod(LocalDate.of(2030, 6, 10), LocalDate.of(2030, 6, 20)),
@@ -66,5 +95,9 @@ class CancelBookingServiceTest {
     booking.confirmHeldBooking();
 
     return booking;
+  }
+
+  private UserId userId() {
+    return new UserId(UUID.fromString("00000000-0000-0000-0000-000000000001"));
   }
 }

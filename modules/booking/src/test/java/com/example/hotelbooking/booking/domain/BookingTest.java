@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.LocalDate;
 import java.util.UUID;
@@ -184,6 +185,7 @@ class BookingTest {
     Booking booking =
         Booking.restore(
             BookingId.newId(),
+            userId(),
             UUID.randomUUID(),
             UUID.randomUUID(),
             new StayPeriod(LocalDate.of(2030, 6, 10), LocalDate.of(2030, 6, 12)),
@@ -225,9 +227,39 @@ class BookingTest {
     assertNull(booking.getHoldId());
   }
 
+  @Test
+  void shouldKnowBookingOwner() {
+    UserId userId = userId();
+
+    Booking booking =
+        Booking.create(
+            userId,
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            new StayPeriod(LocalDate.of(2030, 6, 10), LocalDate.of(2030, 6, 20)),
+            2);
+
+    assertEquals(userId, booking.getUserId());
+  }
+
+  @Test
+  void shouldCheckBookingOwnership() {
+    UserId userId = userId();
+    Booking booking =
+        Booking.create(
+            userId,
+            UUID.randomUUID(),
+            UUID.randomUUID(),
+            new StayPeriod(LocalDate.of(2030, 6, 10), LocalDate.of(2030, 6, 20)),
+            2);
+
+    assertTrue(booking.isOwnedBy(userId));
+  }
+
   private Booking restoreBooking(BookingStatus status, UUID holdId) {
     return Booking.restore(
         BookingId.newId(),
+        userId(),
         UUID.randomUUID(),
         UUID.randomUUID(),
         new StayPeriod(LocalDate.of(2030, 6, 10), LocalDate.of(2030, 6, 12)),
@@ -238,9 +270,14 @@ class BookingTest {
 
   private Booking createBooking() {
     return Booking.create(
+        userId(),
         UUID.randomUUID(),
         UUID.randomUUID(),
         new StayPeriod(LocalDate.of(2030, 6, 10), LocalDate.of(2030, 6, 20)),
         2);
+  }
+
+  private UserId userId() {
+    return new UserId(UUID.fromString("00000000-0000-0000-0000-000000000001"));
   }
 }
