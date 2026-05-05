@@ -12,7 +12,8 @@ public record BookingOutboxMessage(
     String eventType,
     int eventVersion,
     Map<String, Object> payload,
-    Instant occurredAt) {
+    Instant occurredAt,
+    int attempts) {
 
   private static final String BOOKING_AGGREGATE_TYPE = "Booking";
 
@@ -34,6 +35,7 @@ public record BookingOutboxMessage(
         event.eventType(),
         event.eventVersion(),
         event.payload(),
-        event.occurredAt());
+        event.occurredAt(),
+        0);
   }
 }

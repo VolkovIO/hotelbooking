@@ -102,7 +102,8 @@ class JdbcBookingOutboxRepository implements BookingOutboxRepository {
                 outbox.event_type,
                 outbox.event_version,
                 outbox.payload,
-                outbox.occurred_at
+                outbox.occurred_at,
+                outbox.attempts
             """)
         .param("newStatus", BookingOutboxStatus.NEW.name())
         .param(PARAM_PROCESSING_STATUS, BookingOutboxStatus.PROCESSING.name())
@@ -118,7 +119,8 @@ class JdbcBookingOutboxRepository implements BookingOutboxRepository {
                     rs.getString("event_type"),
                     rs.getInt("event_version"),
                     deserializePayload(rs.getString("payload")),
-                    rs.getTimestamp("occurred_at").toInstant()))
+                    rs.getTimestamp("occurred_at").toInstant(),
+                    rs.getInt("attempts")))
         .list();
   }
 
