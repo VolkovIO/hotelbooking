@@ -11,6 +11,7 @@ modular monolith
   -> separately runnable service applications
   -> security and ownership model
   -> transactional outbox
+  -> outbox polling publisher
   -> Kafka integration
   -> saga/process manager
   -> observability and resilience
@@ -22,7 +23,7 @@ The project is intentionally not production-ready yet.
 
 ---
 
-## Current stage: v0.6.0
+## Current stage: v0.6.1
 
 Starting from `v0.5.0`, the booking service supports:
 
@@ -33,7 +34,7 @@ booking ownership checks
 Google JWT audience validation
 ```
 
-Starting from `v0.5.2`, the project also clarifies the target security model:
+Starting from `v0.5.2`, the project clarifies the target security model:
 
 ```text
 User / Frontend
@@ -47,16 +48,12 @@ Booking service
 
 Starting from `v0.6.0`, the booking service records lifecycle events in a transactional outbox.
 
-```text
-The current outbox implementation writes events to PostgreSQL but does not publish them yet.
-Outbox polling and Kafka publication are planned for later releases.
+Starting from `v0.6.1`, the booking service includes a scheduled outbox polling publisher.
 
-Local development profiles must be activated explicitly.
+The current publisher uses a logging adapter and does not send events to Kafka yet.
 
-Public inventory catalog endpoints are available without authentication so that users can browse hotels, room types and availability before login.
+Kafka publication is planned for `v0.7.0`.
 
-Booking creation and booking management require authentication.
-```
 ---
 
 ## Project goals
@@ -77,6 +74,7 @@ gRPC integration
 Google JWT authentication
 booking ownership
 transactional outbox
+outbox polling and retry handling
 Kafka integration
 idempotency
 mTLS service-to-service security
@@ -99,34 +97,17 @@ hotelbooking/
 
   apps/
     booking-service-app/
-      build.gradle
-      src/main/java
-      src/main/resources
-
     inventory-service-app/
-      build.gradle
-      src/main/java
-      src/main/resources
 
   modules/
     booking/
-      build.gradle
-      src/main/java
-      src/main/resources
-      src/test/java
-
     inventory/
-      build.gradle
-      src/main/java
-      src/test/java
-
     inventory-grpc-api/
-      build.gradle
-      src/main/proto
 
   docs/
     security-model.md
     technical-debt.md
+    outbox.md
     logging-strategy.md
 ```
 
@@ -138,7 +119,7 @@ hotelbooking/
 
 `apps/booking-service-app` is the booking runtime application.
 
-It exposes the booking HTTP API, stores booking data in PostgreSQL and calls inventory through gRPC.
+It exposes the booking HTTP API, stores booking data in PostgreSQL, writes booking events to the outbox and calls inventory through gRPC.
 
 Responsibilities:
 
@@ -147,6 +128,8 @@ booking lifecycle
 booking ownership
 Google JWT based external user authentication
 PostgreSQL booking persistence
+transactional outbox
+outbox polling publisher
 gRPC client adapter to inventory
 ```
 
@@ -169,16 +152,6 @@ gRPC server adapter for booking integration
 
 ---
 
-## Modules
-
-`modules/booking` contains booking domain, booking application use cases, booking HTTP adapters, booking PostgreSQL persistence and booking gRPC client integration.
-
-`modules/inventory` contains inventory domain, inventory application use cases, inventory HTTP adapters, inventory MongoDB persistence and inventory gRPC server adapters.
-
-`modules/inventory-grpc-api` contains the protobuf contract and generated gRPC Java API used by both booking and inventory.
-
----
-
 ## Runtime architecture
 
 Current runtime flow:
@@ -196,27 +169,25 @@ Client / Swagger / Future Frontend
   -> MongoDB
 ```
 
-Booking service:
+Booking state and outbox flow:
 
 ```text
-booking-service-app
-  -> modules:booking
-  -> modules:inventory-grpc-api
-  -> PostgreSQL
-  -> gRPC client to inventory-service-app
+Booking application use case
+  -> booking state change
+  -> BookingStateChangePersistenceService
+  -> PostgreSQL booking table
+  -> PostgreSQL booking_outbox table
 ```
 
-Inventory service:
+Outbox polling flow:
 
 ```text
-inventory-service-app
-  -> modules:inventory
-  -> modules:inventory-grpc-api
-  -> MongoDB
-  -> gRPC server
+BookingOutboxScheduler
+  -> BookingOutboxPollingService
+  -> claim NEW outbox rows as PROCESSING
+  -> LoggingBookingOutboxEventPublisher
+  -> mark rows as PUBLISHED / NEW retry / FAILED
 ```
-
-The booking service must not depend on the inventory domain or inventory application code directly.
 
 Allowed dependency:
 
@@ -244,15 +215,71 @@ The booking module currently supports the following lifecycle:
 
 Current supported transitions:
 
-| Operation | From | To | Inventory effect |
-|---|---|---|---|
-| Create booking | - | `ON_HOLD` | Places an inventory hold |
-| Confirm booking | `ON_HOLD` | `CONFIRMED` | Converts held rooms to booked rooms |
-| Cancel held booking | `ON_HOLD` | `CANCELLED` | Releases the inventory hold |
-| Cancel confirmed booking | `CONFIRMED` | `CANCELLED` | Releases booked inventory rooms |
+| Operation | From | To | Inventory effect | Outbox event |
+|---|---|---|---|---|
+| Create booking | - | `ON_HOLD` | Places an inventory hold | `BookingPlacedOnHold` |
+| Confirm booking | `ON_HOLD` | `CONFIRMED` | Converts held rooms to booked rooms | `BookingConfirmed` |
+| Cancel held booking | `ON_HOLD` | `CANCELLED` | Releases the inventory hold | `BookingCancelled` |
+| Cancel confirmed booking | `CONFIRMED` | `CANCELLED` | Releases booked inventory rooms | `BookingCancelled` |
 
 A booking is not physically deleted when it is cancelled.
 Cancellation is represented by the `CANCELLED` status.
+
+---
+
+## Transactional outbox
+
+The booking service records booking lifecycle events in a PostgreSQL outbox table.
+
+Current event types:
+
+```text
+BookingPlacedOnHold
+BookingConfirmed
+BookingCancelled
+```
+
+Current outbox statuses:
+
+```text
+NEW
+PROCESSING
+PUBLISHED
+FAILED
+```
+
+The local transaction guarantees:
+
+```text
+booking state change
+  + booking outbox event insert
+```
+
+The current publisher is a scheduled polling publisher with a logging adapter.
+
+This means events are processed like this:
+
+```text
+NEW
+  -> PROCESSING
+  -> PUBLISHED
+```
+
+On failure:
+
+```text
+PROCESSING
+  -> NEW with next_attempt_at for retry
+  -> or FAILED when max attempts are reached
+```
+
+Kafka is not used yet.
+
+More details:
+
+```text
+docs/outbox.md
+```
 
 ---
 
@@ -304,107 +331,6 @@ Booking creation requires authentication:
 POST /api/v1/bookings
 ```
 
-Intended user journey:
-
-```text
-browse hotels and availability anonymously
-  -> choose room type and stay period
-  -> login with Google
-  -> create booking
-  -> manage own booking
-```
-
----
-
-## Inventory admin API
-
-Inventory administrative endpoints are intended for data setup and management.
-
-Examples:
-
-```text
-POST /api/v1/admin/hotels
-POST /api/v1/admin/hotels/{hotelId}/room-types
-POST /api/v1/admin/hotels/{hotelId}/room-types/{roomTypeId}/availability/initialization
-PUT  /api/v1/admin/hotels/{hotelId}/room-types/{roomTypeId}/availability/capacity
-```
-
-In local development, the `security-dev` profile provides a mock admin user with:
-
-```text
-ROLE_USER
-ROLE_ADMIN
-```
-
-This is not a production-grade admin authentication model.
-
----
-
-## Booking to inventory communication
-
-Booking-to-inventory communication uses gRPC.
-
-Runtime communication:
-
-```text
-booking-service-app
-  -> gRPC client
-  -> inventory-service-app
-```
-
-The gRPC contract is located in:
-
-```text
-modules/inventory-grpc-api/src/main/proto/inventory/v1/inventory_service.proto
-```
-
-Generated Java/gRPC classes are produced by Gradle during the build.
-
-Generate protobuf sources manually:
-
-```bash
-./gradlew :modules:inventory-grpc-api:generateProto
-```
-
-Generated sources are located under:
-
-```text
-modules/inventory-grpc-api/build/generated/sources/proto
-```
-
-They are not committed to Git.
-
----
-
-## Current API behavior
-
-The current API supports:
-
-```text
-public hotel catalog browsing
-public room availability lookup
-admin hotel registration
-admin room type registration
-admin availability setup
-booking creation
-booking confirmation
-booking cancellation
-booking details lookup
-booking ownership checks
-```
-
-Booking cancellation behavior:
-
-```text
-if the booking is ON_HOLD
-  -> cancellation releases the inventory hold
-
-if the booking is CONFIRMED
-  -> cancellation releases booked inventory rooms
-
-cancelled bookings remain stored with status CANCELLED
-```
-
 ---
 
 ## Running locally
@@ -429,14 +355,6 @@ On Windows:
 gradlew.bat :apps:inventory-service-app:bootRun --args="--spring.profiles.active=local"
 ```
 
-Inventory service endpoints:
-
-```text
-HTTP API:  http://localhost:8081
-Swagger:   http://localhost:8081/swagger-ui/index.html
-gRPC API:  localhost:9090
-```
-
 Start booking service in another terminal:
 
 ```bash
@@ -456,13 +374,17 @@ HTTP API:  http://localhost:8080
 Swagger:   http://localhost:8080/swagger-ui/index.html
 ```
 
-To create a booking through Swagger, start `inventory-service-app` first, then start `booking-service-app`.
+Inventory service endpoints:
+
+```text
+HTTP API:  http://localhost:8081
+Swagger:   http://localhost:8081/swagger-ui/index.html
+gRPC API:  localhost:9090
+```
 
 ---
 
 ## Local profiles
-
-Starting from `v0.5.2`, development profiles are activated explicitly through the `local` profile.
 
 Booking local profile expands to:
 
@@ -470,6 +392,8 @@ Booking local profile expands to:
 booking-postgres
 inventory-grpc-client
 security-dev
+outbox-publisher
+outbox-logging
 ```
 
 Inventory local profile expands to:
@@ -480,62 +404,30 @@ inventory-grpc-server
 security-dev
 ```
 
-This avoids silently starting services in development security mode by default.
-
 ---
 
-## Initializing demo inventory MongoDB data
+## Verifying outbox processing
 
-Demo inventory data is stored in:
+After creating, confirming or cancelling a booking, check the outbox table:
+
+```sql
+select id, event_type, status, attempts, published_at, last_error
+from booking_outbox
+order by created_at desc;
+```
+
+Expected result in local mode:
 
 ```text
-docker/mongo/init/demo-data.js
+status = PUBLISHED
+published_at is not null
 ```
 
-The script creates fixed demo hotels, room types and room availability for:
-
-```text
-2030-06-01 .. 2030-06-30
-```
-
-Initialize demo data from Git Bash:
-
-```bash
-docker compose exec -T mongo mongosh "mongodb://localhost:27017/hotelbooking" < docker/mongo/init/demo-data.js
-```
-
-After this, use the inventory Swagger UI to inspect public hotel catalog endpoints and the booking Swagger UI to create bookings.
-
----
-
-## Swagger
-
-Inventory Swagger:
-
-```text
-http://localhost:8081/swagger-ui/index.html
-```
-
-Booking Swagger:
-
-```text
-http://localhost:8080/swagger-ui/index.html
-```
-
-Swagger remains part of the project even after a frontend or BFF is introduced.
-
-The future frontend is intended for demonstration and portfolio presentation.
-Swagger is intended for API exploration and manual testing.
+The booking service logs should include messages from the logging outbox publisher.
 
 ---
 
 ## Build and quality checks
-
-Show Gradle projects:
-
-```bash
-./gradlew projects
-```
 
 Run tests:
 
@@ -555,8 +447,6 @@ On Windows:
 gradlew.bat clean check
 ```
 
-`check` runs tests and static analysis tasks such as Checkstyle, PMD and SpotBugs.
-
 Format code:
 
 ```bash
@@ -572,14 +462,6 @@ Build service jars:
 
 ---
 
-## Recommended Java version
-
-Java 21 LTS is recommended.
-
-The project may also run on newer JDKs, but newer non-LTS JDKs can produce warnings from gRPC/Netty about deprecated `sun.misc.Unsafe` memory access APIs.
-
----
-
 ## Current limitations
 
 This project is still a learning system.
@@ -590,13 +472,13 @@ Known limitations:
 no frontend login flow yet
 no service-to-service mTLS yet
 no distributed transaction handling
-no outbox yet
 no Kafka integration yet
 no saga/process manager yet
 no payment service yet
 no notification service yet
 no audit service yet
-no production-grade retry/idempotency model
+no production-grade idempotency model yet
+no consumer inbox pattern yet
 no centralized observability yet
 service-level integration tests need to be restored and extended
 ```
@@ -612,12 +494,6 @@ docs/technical-debt.md
 ## Roadmap
 
 ```text
-v0.6.0
-  transactional outbox and booking lifecycle events
-
-v0.6.1
-  outbox polling publisher and retries
-
 v0.6.2
   inventory gRPC mTLS
 
@@ -659,18 +535,4 @@ The project can be presented as:
 Educational distributed booking platform demonstrating Clean Architecture, DDD,
 transactional outbox, Kafka-based integration, mTLS service-to-service security,
 saga orchestration, idempotency, observability and production-oriented testing.
-```
-
-The focus is not only on Spring Boot, but on architectural trade-offs:
-
-```text
-service boundaries
-data ownership
-consistency
-transactions
-security
-event-driven integration
-failure handling
-observability
-testing strategy
 ```
