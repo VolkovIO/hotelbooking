@@ -2,9 +2,9 @@
 
 ## Purpose
 
-The transactional outbox is used to reliably record booking lifecycle events.
+The transactional outbox is used to reliably record and process booking lifecycle events.
 
-The goal is to make this operation atomic:
+The first goal is local atomicity:
 
 ```text
 booking state change
@@ -12,6 +12,15 @@ booking state change
 ```
 
 Both records must be committed in the same PostgreSQL transaction.
+
+The second goal is reliable asynchronous processing:
+
+```text
+booking_outbox NEW row
+  -> claimed by publisher
+  -> processed
+  -> marked as PUBLISHED or scheduled for retry
+```
 
 This is the foundation for future Kafka publication.
 
@@ -28,17 +37,26 @@ Implemented in `v0.6.0`:
 - transactional booking state + outbox persistence
 ```
 
+Implemented in `v0.6.1`:
+
+```text
+- outbox polling service
+- logging publisher adapter
+- NEW -> PROCESSING -> PUBLISHED status flow
+- retryable failure handling
+- terminal FAILED status
+- SKIP LOCKED based batch claiming
+```
+
 Not implemented yet:
 
 ```text
-- outbox polling publisher
 - Kafka publication
-- retries
 - dead-letter topic
 - consumer inbox/idempotency
 ```
 
-These are planned for later releases.
+Kafka publication is planned for `v0.7.0`.
 
 ---
 
@@ -82,19 +100,29 @@ created_at
 updated_at
 ```
 
-Current initial status:
-
-```text
-NEW
-```
-
-Future publisher statuses:
+Current statuses:
 
 ```text
 NEW
 PROCESSING
 PUBLISHED
 FAILED
+```
+
+Status meaning:
+
+```text
+NEW
+  event is waiting for processing
+
+PROCESSING
+  event was claimed by an outbox publisher instance
+
+PUBLISHED
+  event was successfully processed by the current publisher adapter
+
+FAILED
+  event reached max attempts and will not be retried automatically
 ```
 
 ---
@@ -124,7 +152,7 @@ to choose the correct deserialization and handling logic.
 
 ## Transaction boundary
 
-The transaction boundary is implemented in:
+The booking state and outbox insert transaction boundary is implemented in:
 
 ```text
 BookingStateChangePersistenceService
@@ -137,9 +165,9 @@ Booking aggregate
 Booking outbox message
 ```
 
-in one transaction.
+in one PostgreSQL transaction.
 
-This is the most important rule of the current implementation:
+The most important rule is:
 
 ```text
 bookingRepository.save(...)
@@ -154,7 +182,7 @@ must either both commit or both roll back.
 
 Booking use cases still call inventory before persisting the booking state.
 
-The intended order is:
+Current order:
 
 ```text
 call inventory
@@ -165,6 +193,125 @@ call inventory
 The PostgreSQL transaction should not be kept open while the service waits for a remote gRPC call.
 
 This avoids long database transactions around network operations.
+
+---
+
+## Polling publisher
+
+Starting from `v0.6.1`, booking outbox messages can be processed by a scheduled polling publisher.
+
+Current implementation:
+
+```text
+booking_outbox NEW rows
+  -> claimed as PROCESSING
+  -> published through logging adapter
+  -> marked as PUBLISHED
+```
+
+The current publisher adapter is intentionally simple:
+
+```text
+LoggingBookingOutboxEventPublisher
+```
+
+It logs the event instead of sending it to Kafka.
+
+Kafka publication is planned for `v0.7.0`.
+
+The polling service already prepares the mechanics needed for Kafka:
+
+```text
+batch processing
+status transitions
+retry delay
+max attempts
+failure recording
+SKIP LOCKED based claiming
+```
+
+---
+
+## Claiming messages
+
+Outbox rows are claimed by:
+
+```text
+claimBatchForProcessing(...)
+```
+
+The PostgreSQL implementation uses:
+
+```text
+FOR UPDATE SKIP LOCKED
+```
+
+This allows multiple service instances to safely claim different events without processing the same row at the same time.
+
+Current claim flow:
+
+```text
+select NEW rows where next_attempt_at <= now
+  -> lock selected rows
+  -> update selected rows to PROCESSING
+  -> return claimed messages
+```
+
+---
+
+## Retry behavior
+
+If publication succeeds:
+
+```text
+PROCESSING -> PUBLISHED
+published_at is set
+last_error is cleared
+```
+
+If publication fails and attempts are not exhausted:
+
+```text
+PROCESSING -> NEW
+attempts = attempts + 1
+next_attempt_at = now + retryDelay
+last_error is stored
+```
+
+If publication fails and max attempts are reached:
+
+```text
+PROCESSING -> FAILED
+attempts = attempts + 1
+last_error is stored
+```
+
+The current implementation handles expected publisher failures through:
+
+```text
+BookingOutboxPublicationException
+```
+
+Unexpected runtime failures should not be treated as normal publication failures.
+
+---
+
+## Logging publisher adapter
+
+The logging adapter is used only to validate outbox mechanics before Kafka is introduced.
+
+Current behavior:
+
+```text
+log eventId
+log eventType
+log eventVersion
+log aggregateType
+log aggregateId
+log payload
+```
+
+This adapter will be replaced or complemented by a Kafka adapter in `v0.7.0`.
 
 ---
 
@@ -194,26 +341,18 @@ The larger cross-service consistency problem will be addressed later by the book
 
 ## Planned event flow
 
-Current `v0.6.0` flow:
+Current `v0.6.1` flow:
 
 ```text
 Booking use case
   -> inventory operation
   -> booking state change
   -> booking_outbox insert
-```
 
-Planned `v0.6.1` flow:
-
-```text
-Booking use case
-  -> booking_outbox insert
-
-Outbox polling publisher
-  -> reads NEW events
-  -> marks event as PROCESSING
-  -> publishes or simulates publication
-  -> marks event as PUBLISHED or FAILED
+Outbox scheduler
+  -> claim NEW messages
+  -> logging publisher
+  -> mark PUBLISHED / retry / FAILED
 ```
 
 Planned `v0.7.0` flow:
@@ -222,9 +361,11 @@ Planned `v0.7.0` flow:
 Booking use case
   -> booking_outbox insert
 
-Outbox polling publisher
+Outbox scheduler
+  -> claim NEW messages
   -> Kafka producer
   -> booking.events topic
+  -> mark PUBLISHED / retry / FAILED
 ```
 
 ---
@@ -259,23 +400,12 @@ Future Kafka messages should use an envelope similar to:
 }
 ```
 
-`correlationId` and `causationId` are not mandatory for the first outbox table implementation,
+`correlationId` and `causationId` are not mandatory for the current logging adapter,
 but they should be introduced before saga and observability work.
 
 ---
 
 ## Future work
-
-Planned for `v0.6.1`:
-
-```text
-- polling publisher
-- batch selection
-- retry attempts
-- status transitions
-- failure recording
-- SKIP LOCKED based locking
-```
 
 Planned for `v0.7.0`:
 

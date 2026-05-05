@@ -2,7 +2,7 @@
 
 ## Current version
 
-`v0.6.0`
+`v0.6.1`
 
 The project is a learning-oriented backend for hotel booking.
 
@@ -21,7 +21,8 @@ separate booking and inventory service applications
   -> Google JWT for external booking API access
   -> booking ownership checks
   -> transactional outbox foundation
-  -> preparation for outbox publisher, Kafka, mTLS and saga
+  -> outbox polling publisher with logging adapter
+  -> preparation for Kafka, mTLS and saga
 ```
 
 ---
@@ -33,22 +34,30 @@ create booking
   -> place inventory hold
   -> booking becomes ON_HOLD
   -> booking outbox event is stored
+  -> polling publisher logs the event
+  -> outbox row becomes PUBLISHED
 
 confirm booking
   -> confirm inventory hold
   -> held rooms become booked rooms
   -> booking becomes CONFIRMED
   -> booking outbox event is stored
+  -> polling publisher logs the event
+  -> outbox row becomes PUBLISHED
 
 cancel ON_HOLD booking
   -> release inventory hold
   -> booking becomes CANCELLED
   -> booking outbox event is stored
+  -> polling publisher logs the event
+  -> outbox row becomes PUBLISHED
 
 cancel CONFIRMED booking
   -> release booked inventory rooms
   -> booking becomes CANCELLED
   -> booking outbox event is stored
+  -> polling publisher logs the event
+  -> outbox row becomes PUBLISHED
 ```
 
 A cancelled booking is not physically deleted. Cancellation is represented by the `CANCELLED` status.
@@ -73,94 +82,6 @@ InventoryReservationPort
 The adapter between booking and inventory acts as an anti-corruption layer.
 
 It maps inventory-side application results and exceptions to booking-side contracts.
-
----
-
-### Separate service applications
-
-The project is now a Gradle multi-project build with two separately runnable Spring Boot applications:
-
-```text
-apps/booking-service-app
-apps/inventory-service-app
-```
-
-Booking and inventory are still kept in the same repository, but they run as separate applications.
-
----
-
-### gRPC inventory boundary
-
-Booking-to-inventory communication goes through gRPC.
-
-Allowed dependency:
-
-```text
-booking -> inventory-grpc-api
-```
-
-Forbidden dependency:
-
-```text
-booking -> inventory domain/application
-```
-
-The gRPC contract is owned by:
-
-```text
-modules/inventory-grpc-api
-```
-
----
-
-### PostgreSQL persistence for booking
-
-Booking state is persisted in PostgreSQL.
-
-The booking persistence adapter is owned by the booking module.
-
----
-
-### MongoDB persistence for inventory
-
-Inventory data is persisted in MongoDB.
-
-MongoDB currently stores hotels, room availability and room holds.
-
----
-
-### Booking security and ownership
-
-The booking service supports Google JWT authentication in the `security-jwt` profile.
-
-An authenticated Google user is mapped to an internal application user.
-
-Bookings are owned by internal `UserId` values, not directly by Google accounts.
-
-The intended mapping is:
-
-```text
-Google JWT subject/email
-  -> app_users
-  -> internal UserId
-  -> Booking.userId
-```
-
-Booking ownership checks are enforced by the booking application layer.
-
----
-
-### Explicit local profiles
-
-Starting from `v0.5.2`, local development profiles are activated explicitly.
-
-The default application configuration should not silently start in development security mode.
-
-Local development is started with:
-
-```text
---spring.profiles.active=local
-```
 
 ---
 
@@ -196,7 +117,28 @@ This is now handled atomically.
 
 ---
 
-## v0.6.0 technical debt snapshot
+### Outbox polling publisher
+
+Starting from `v0.6.1`, the project has a polling outbox publisher with a logging adapter.
+
+Implemented:
+
+```text
+- claiming NEW events as PROCESSING
+- logging adapter publication
+- PUBLISHED status transition
+- retryable failures
+- terminal FAILED status
+- SKIP LOCKED based batch claiming
+```
+
+The current publisher does not send messages to Kafka yet.
+
+The logging adapter exists to validate outbox mechanics before Kafka is introduced.
+
+---
+
+## v0.6.1 technical debt snapshot
 
 ### Cross-service consistency
 
@@ -242,7 +184,6 @@ The larger distributed consistency problem is intentionally left for the saga/pr
 Planned improvements:
 
 ```text
-v0.6.1 outbox polling publisher
 v0.7.0 Kafka event publication
 v0.10.0 booking process manager / saga
 ```
@@ -251,37 +192,27 @@ v0.10.0 booking process manager / saga
 
 ### Outbox publication
 
-The project has the first transactional outbox foundation, but it does not publish events yet.
+The project now has the first outbox polling publisher.
 
 Implemented:
 
 ```text
-- booking_outbox table
-- booking lifecycle event model
-- booking outbox repository
+- outbox table
+- lifecycle event model
 - atomic booking state + outbox persistence
+- polling publisher
+- status transitions
+- retryable failure handling
+- terminal failure handling
+- logging adapter
 ```
 
 Not implemented yet:
 
 ```text
-- outbox polling publisher
-- event status transitions after publication
-- retries
-- failure handling
 - Kafka publication
 - dead-letter topic
-```
-
-Planned for `v0.6.1`:
-
-```text
-- polling publisher
-- batch selection
-- retry attempts
-- status transitions
-- failure recording
-- SKIP LOCKED based locking
+- consumer inbox/idempotency
 ```
 
 Planned for `v0.7.0`:
@@ -382,62 +313,11 @@ Planned for `v0.6.2`:
 
 ---
 
-### Inventory HTTP admin authentication
-
-Inventory administrative HTTP endpoints are protected by `ROLE_ADMIN`.
-
-In local development this is provided by the `security-dev` profile and a mock admin user.
-
-This is intentionally not a production-grade admin authentication model.
-
-Future options:
-
-```text
-- Google JWT based admin access
-- separate admin frontend
-- BFF-level authorization
-- internal-only admin API
-```
-
-This is not urgent before outbox publisher, Kafka, mTLS and saga.
-
----
-
-### Public catalog vs admin API
-
-Users should be able to browse hotels, room types and availability before login.
-
-Target public endpoints:
-
-```text
-GET /api/v1/hotels
-GET /api/v1/hotels/{hotelId}
-GET /api/v1/hotels/{hotelId}/room-types/{roomTypeId}/availability
-```
-
-Administrative write endpoints should remain under:
-
-```text
-/api/v1/admin/**
-```
-
-This separation should be preserved when the frontend is introduced.
-
----
-
 ### Inventory reservation identity
 
 Booking currently stores `holdId` only while the booking is in `ON_HOLD`.
 
 After confirmation, the hold id is cleared.
-
-Confirmed booking cancellation is currently performed by:
-
-```text
-hotelId + roomTypeId + stayPeriod + rooms
-```
-
-This is simple and works for the current learning stage, but it is not ideal for saga, audit and compensation.
 
 Future improvement:
 
@@ -447,43 +327,11 @@ keep stable reservation identity after confirmation
 use it for cancellation, audit and saga compensation
 ```
 
-Possible future model:
-
-```text
-InventoryReservation
-  id
-  hotelId
-  roomTypeId
-  stayPeriod
-  rooms
-  status: HELD / CONFIRMED / CANCELLED / EXPIRED
-```
-
-Booking would store:
-
-```text
-inventoryReservationId
-```
-
 ---
 
 ### Inventory concurrency
 
 Inventory availability updates are not yet protected from concurrent lost updates.
-
-Risk example:
-
-```text
-availableRooms = 1
-
-Request A reads heldRooms = 0
-Request B reads heldRooms = 0
-
-A saves heldRooms = 1
-B saves heldRooms = 1
-
-Two holds exist, but availability shows only one held room
-```
 
 Future improvements:
 
@@ -501,15 +349,6 @@ This should be addressed before the project is considered portfolio-ready.
 ### Idempotency
 
 Current command operations are not idempotent.
-
-Examples:
-
-```text
-- repeated create booking requests can create multiple bookings
-- repeated confirm requests may produce domain errors
-- repeated cancel requests may produce domain errors
-- repeated future Kafka events will need deduplication
-```
 
 Future improvements:
 
@@ -591,15 +430,6 @@ It should demonstrate:
 - failure path that triggers saga compensation
 ```
 
-Possible statuses:
-
-```text
-CREATED
-APPROVED
-DECLINED
-CANCELLED
-```
-
 ---
 
 ### Saga / process manager
@@ -634,8 +464,6 @@ Audit is planned as a minimal symbolic service.
 It should consume cross-cutting events and store audit records.
 
 Audit should not block the main booking/payment process.
-
-If audit is down, producers and business services should continue working.
 
 ---
 
@@ -698,9 +526,6 @@ ADR-007: Symbolic payment provider for educational MVP
 ## Roadmap
 
 ```text
-v0.6.1
-  outbox polling publisher and retries
-
 v0.6.2
   inventory gRPC mTLS
 
