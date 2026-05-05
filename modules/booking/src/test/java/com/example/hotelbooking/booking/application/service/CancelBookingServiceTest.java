@@ -2,6 +2,7 @@ package com.example.hotelbooking.booking.application.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -26,6 +27,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class CancelBookingServiceTest {
 
+  @Mock private BookingStateChangePersistenceService bookingStateChangePersistenceService;
+
   @Mock private BookingRepository bookingRepository;
 
   @Mock private InventoryReservationPort inventoryReservationPort;
@@ -34,7 +37,9 @@ class CancelBookingServiceTest {
 
   @BeforeEach
   void setUp() {
-    service = new CancelBookingService(bookingRepository, inventoryReservationPort);
+    service =
+        new CancelBookingService(
+            bookingRepository, inventoryReservationPort, bookingStateChangePersistenceService);
   }
 
   @Test
@@ -42,7 +47,7 @@ class CancelBookingServiceTest {
     Booking booking = confirmedBooking();
 
     when(bookingRepository.findById(booking.getId())).thenReturn(Optional.of(booking));
-    when(bookingRepository.save(booking)).thenReturn(booking);
+    when(bookingStateChangePersistenceService.persist(any(), any())).thenReturn(booking);
 
     Booking result = service.execute(new CancelBookingCommand(booking.getId(), userId()));
 
@@ -55,7 +60,7 @@ class CancelBookingServiceTest {
             booking.getStayPeriod().checkIn(),
             booking.getStayPeriod().checkOut(),
             1);
-    verify(bookingRepository).save(booking);
+    verify(bookingStateChangePersistenceService).persist(any(), any());
   }
 
   @Test

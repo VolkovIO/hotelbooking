@@ -1,10 +1,10 @@
 package com.example.hotelbooking.booking.application.service;
 
 import com.example.hotelbooking.booking.application.command.CreateBookingCommand;
+import com.example.hotelbooking.booking.application.event.BookingLifecycleEvent;
 import com.example.hotelbooking.booking.application.exception.GuestCountExceedsRoomCapacityException;
 import com.example.hotelbooking.booking.application.exception.RoomTypeReferenceNotFoundException;
 import com.example.hotelbooking.booking.application.port.in.CreateBookingUseCase;
-import com.example.hotelbooking.booking.application.port.out.BookingRepository;
 import com.example.hotelbooking.booking.application.port.out.InventoryLookupPort;
 import com.example.hotelbooking.booking.application.port.out.InventoryReservationPort;
 import com.example.hotelbooking.booking.application.port.out.RoomTypeReference;
@@ -20,9 +20,9 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class CreateBookingService implements CreateBookingUseCase {
 
-  private final BookingRepository bookingRepository;
   private final InventoryLookupPort inventoryLookupPort;
   private final InventoryReservationPort inventoryReservationPort;
+  private final BookingStateChangePersistenceService bookingStateChangePersistenceService;
 
   @Override
   public Booking execute(CreateBookingCommand command) {
@@ -72,7 +72,9 @@ public class CreateBookingService implements CreateBookingUseCase {
 
     booking.placeOnHold(holdId);
 
-    Booking savedBooking = bookingRepository.save(booking);
+    Booking savedBooking =
+        bookingStateChangePersistenceService.persist(
+            booking, BookingLifecycleEvent.placedOnHold(booking));
 
     log.info(
         "Booking created: bookingId={}, userId={}, hotelId={}, roomTypeId={}, status={}, holdId={}",

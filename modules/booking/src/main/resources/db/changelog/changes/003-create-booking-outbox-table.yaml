@@ -1,0 +1,142 @@
+databaseChangeLog:
+  - changeSet:
+      id: 003-create-booking-outbox-table
+      author: volkovself
+      changes:
+        - createTable:
+            tableName: booking_outbox
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: aggregate_type
+                  type: varchar(64)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: aggregate_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: event_type
+                  type: varchar(128)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: event_version
+                  type: int
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: payload
+                  type: jsonb
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: status
+                  type: varchar(32)
+                  defaultValue: NEW
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: attempts
+                  type: int
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: next_attempt_at
+                  type: timestamp with time zone
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: occurred_at
+                  type: timestamp with time zone
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: locked_at
+                  type: timestamp with time zone
+
+              - column:
+                  name: locked_by
+                  type: varchar(128)
+
+              - column:
+                  name: published_at
+                  type: timestamp with time zone
+
+              - column:
+                  name: last_error
+                  type: text
+
+              - column:
+                  name: created_at
+                  type: timestamp with time zone
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: updated_at
+                  type: timestamp with time zone
+                  defaultValueComputed: CURRENT_TIMESTAMP
+                  constraints:
+                    nullable: false
+
+        - createIndex:
+            tableName: booking_outbox
+            indexName: ix_booking_outbox_status_next_attempt
+            columns:
+              - column:
+                  name: status
+              - column:
+                  name: next_attempt_at
+
+        - createIndex:
+            tableName: booking_outbox
+            indexName: ix_booking_outbox_aggregate
+            columns:
+              - column:
+                  name: aggregate_type
+              - column:
+                  name: aggregate_id
+
+        - createIndex:
+            tableName: booking_outbox
+            indexName: ix_booking_outbox_occurred_at
+            columns:
+              - column:
+                  name: occurred_at
+
+      rollback:
+        - dropIndex:
+            tableName: booking_outbox
+            indexName: ix_booking_outbox_occurred_at
+
+        - dropIndex:
+            tableName: booking_outbox
+            indexName: ix_booking_outbox_aggregate
+
+        - dropIndex:
+            tableName: booking_outbox
+            indexName: ix_booking_outbox_status_next_attempt
+
+        - dropTable:
+            tableName: booking_outbox
