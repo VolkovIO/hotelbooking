@@ -2,32 +2,51 @@
 
 ## Current version
 
-`v0.2.2`
+`v0.5.2`
 
-The project is currently a learning modular monolith focused on Clean Architecture, DDD tactical patterns and explicit module boundaries.
+The project is a learning-oriented backend for hotel booking.
 
-The main implemented booking flow is:
+The main goal is to practice Clean Architecture, DDD tactical patterns, explicit module boundaries and the gradual transition from a modular monolith toward distributed services.
 
-    create booking
-      -> place inventory hold
-      -> booking becomes ON_HOLD
+The project is intentionally not production-ready yet.
 
-    confirm booking
-      -> confirm inventory hold
-      -> held rooms become booked rooms
-      -> booking becomes CONFIRMED
+Current architectural focus:
 
-    cancel ON_HOLD booking
-      -> release inventory hold
-      -> booking becomes CANCELLED
+```text
+separate booking and inventory service applications
+  -> explicit business module boundaries
+  -> PostgreSQL persistence for booking
+  -> MongoDB persistence for inventory
+  -> gRPC boundary between booking and inventory
+  -> Google JWT for external booking API access
+  -> booking ownership checks
+  -> preparation for transactional outbox, Kafka, mTLS and saga
+```
 
-    cancel CONFIRMED booking
-      -> release booked inventory rooms
-      -> booking becomes CANCELLED
+---
 
-The project now has PostgreSQL persistence for booking and MongoDB persistence for inventory.
-It is still intentionally not production-ready: transaction boundaries, cross-module consistency,
-optimistic locking and idempotency are not fully addressed yet.
+## Current implemented booking flow
+
+```text
+create booking
+  -> place inventory hold
+  -> booking becomes ON_HOLD
+
+confirm booking
+  -> confirm inventory hold
+  -> held rooms become booked rooms
+  -> booking becomes CONFIRMED
+
+cancel ON_HOLD booking
+  -> release inventory hold
+  -> booking becomes CANCELLED
+
+cancel CONFIRMED booking
+  -> release booked inventory rooms
+  -> booking becomes CANCELLED
+```
+
+A cancelled booking is not physically deleted. Cancellation is represented by the `CANCELLED` status.
 
 ---
 
@@ -37,161 +56,318 @@ optimistic locking and idempotency are not fully addressed yet.
 
 Booking and inventory are separated into explicit modules.
 
-Booking no longer depends directly on inventory domain objects. Integration goes through booking outbound ports and inventory published application use cases.
+Booking no longer depends directly on inventory domain objects. Integration goes through booking outbound ports and inventory published contracts.
 
 Current booking outbound ports:
 
-- `InventoryLookupPort`
-- `InventoryReservationPort`
+```text
+InventoryLookupPort
+InventoryReservationPort
+```
 
-Current inventory published use cases:
+The adapter between booking and inventory acts as an anti-corruption layer.
 
-- `InventoryQueryUseCase`
-- `InventoryReservationUseCase`
-
-The adapter between booking and inventory acts as an anti-corruption layer. It maps inventory-side application results and exceptions to booking-side contracts.
-
----
-
-### Booking-inventory lookup contract
-
-Booking no longer asks inventory several low-level questions such as:
-
-- whether a hotel exists
-- whether a room type exists
-- what guest capacity the room type has
-
-Instead, booking requests a single room type reference required for its use case.
-
-This reduces coupling between modules and prepares the boundary for future persistence work.
+It maps inventory-side application results and exceptions to booking-side contracts.
 
 ---
 
-### Cancellation flow
+### Separate service applications
 
-The cancellation flow now supports both:
+The project is now a Gradle multi-project build with two separately runnable Spring Boot applications:
 
-- cancelling an `ON_HOLD` booking
-- cancelling a `CONFIRMED` booking
+```text
+apps/booking-service-app
+apps/inventory-service-app
+```
 
-Cancelling an `ON_HOLD` booking releases the inventory hold.
-
-Cancelling a `CONFIRMED` booking releases booked inventory rooms.
-
-A cancelled booking is not physically deleted. Cancellation is represented by the `CANCELLED` status.
+Booking and inventory are still kept in the same repository, but they run as separate applications.
 
 ---
 
-## Known technical debt
+### gRPC inventory boundary
+
+Booking-to-inventory communication goes through gRPC.
+
+Allowed dependency:
+
+```text
+booking -> inventory-grpc-api
+```
+
+Forbidden dependency:
+
+```text
+booking -> inventory domain/application
+```
+
+The gRPC contract is owned by:
+
+```text
+modules/inventory-grpc-api
+```
+
+---
+
+### PostgreSQL persistence for booking
+
+Booking state is persisted in PostgreSQL.
+
+The booking persistence adapter is owned by the booking module.
+
+---
+
+### MongoDB persistence for inventory
+
+Inventory data is persisted in MongoDB.
+
+MongoDB currently stores hotels, room availability and room holds.
+
+---
+
+### Booking security and ownership
+
+The booking service supports Google JWT authentication in the `security-jwt` profile.
+
+An authenticated Google user is mapped to an internal application user.
+
+Bookings are owned by internal `UserId` values, not directly by Google accounts.
+
+The intended mapping is:
+
+```text
+Google JWT subject/email
+  -> app_users
+  -> internal UserId
+  -> Booking.userId
+```
+
+Booking ownership checks are enforced by the booking application layer.
+
+---
+
+### Explicit local profiles
+
+Starting from `v0.5.2`, local development profiles are activated explicitly.
+
+The default application configuration should not silently start in development security mode.
+
+Local development is started with:
+
+```text
+--spring.profiles.active=local
+```
+
+---
+
+## v0.5.2 technical debt snapshot
+
+### Cross-service consistency
+
+Booking and inventory are persisted in different databases.
+
+Current booking flow still performs synchronous inventory operations and booking persistence in separate resources.
+
+Known risk:
+
+```text
+inventory operation succeeds
+booking persistence fails
+=> booking and inventory may become inconsistent
+```
+
+Examples:
+
+```text
+place inventory hold succeeds
+booking save fails
+=> orphan inventory hold
+
+confirm inventory hold succeeds
+booking save fails
+=> inventory and booking statuses diverge
+
+release inventory succeeds
+booking cancellation save fails
+=> inventory and booking statuses diverge
+```
+
+Planned improvements:
+
+```text
+v0.6.0 transactional outbox
+v0.7.0 Kafka event publication
+v0.10.0 booking process manager / saga
+```
+
+The transactional outbox will not solve cross-service atomicity by itself.
+It will guarantee that booking state changes and booking events are persisted atomically in the booking database.
+
+The saga/process manager will address the larger distributed workflow.
+
+---
 
 ### Transaction boundaries
 
-Booking creation currently performs an inventory hold before saving the booking.
+Booking use cases need explicit transaction boundaries.
 
-If inventory hold creation succeeds but booking persistence fails, an orphan inventory hold may remain.
+This becomes critical when the transactional outbox is introduced.
 
-Confirmed booking cancellation updates inventory first and then saves the booking.
+Target rule for `v0.6.0`:
 
-If booking persistence fails after inventory is updated, booking and inventory may become inconsistent.
+```text
+booking state change + outbox insert
+must be committed in the same PostgreSQL transaction
+```
 
-This is acceptable for the current in-memory learning stage, but must be addressed before real persistence.
+Possible implementation options:
 
-Possible future options:
+```text
+- use Spring @Transactional on application services
+- introduce an application-level TransactionRunner port
+```
 
-- single database transaction in a modular monolith
-- optimistic locking
-- outbox pattern
-- saga or process manager if modules become distributed services
+For the current learning stage, Spring `@Transactional` on booking application services is acceptable.
+
+---
+
+### Service-to-service security
+
+Booking-to-inventory gRPC communication is not yet protected by mTLS.
+
+Target model:
+
+```text
+external users -> Google JWT
+internal services -> mTLS
+```
+
+Inventory JWT is not the target model for service-to-service communication.
+
+Planned for `v0.6.2`:
+
+```text
+- inventory gRPC server TLS
+- client certificate requirement
+- booking gRPC client certificate
+- internal CA for local development
+- validation of booking-service identity from the client certificate
+```
+
+---
+
+### Inventory HTTP admin authentication
+
+Inventory administrative HTTP endpoints are protected by `ROLE_ADMIN`.
+
+In local development this is provided by the `security-dev` profile and a mock admin user.
+
+This is intentionally not a production-grade admin authentication model.
+
+Future options:
+
+```text
+- Google JWT based admin access
+- separate admin frontend
+- BFF-level authorization
+- internal-only admin API
+```
+
+This is not urgent before outbox, Kafka, mTLS and saga.
+
+---
+
+### Public catalog vs admin API
+
+Users should be able to browse hotels, room types and availability before login.
+
+Target public endpoints:
+
+```text
+GET /api/v1/hotels
+GET /api/v1/hotels/{hotelId}
+GET /api/v1/hotels/{hotelId}/room-types/{roomTypeId}/availability
+```
+
+Administrative write endpoints should remain under:
+
+```text
+/api/v1/admin/**
+```
+
+This separation should be preserved when the frontend is introduced.
 
 ---
 
 ### Inventory reservation identity
 
-The current model clears `holdId` after booking confirmation.
+Booking currently stores `holdId` only while the booking is in `ON_HOLD`.
+
+After confirmation, the hold id is cleared.
 
 Confirmed booking cancellation is currently performed by:
 
-    hotelId + roomTypeId + stayPeriod + rooms
+```text
+hotelId + roomTypeId + stayPeriod + rooms
+```
 
-This is simple and works for the current learning stage.
+This is simple and works for the current learning stage, but it is not ideal for saga, audit and compensation.
 
-A future improvement may introduce a more explicit inventory reservation identity, for example:
+Future improvement:
 
-    inventoryReservationId
-
-This would allow booking to keep a stable reference to the inventory reservation after confirmation.
+```text
+introduce inventoryReservationId
+keep stable reservation identity after confirmation
+use it for cancellation, audit and saga compensation
+```
 
 Possible future model:
 
-- place inventory reservation
-- keep `inventoryReservationId` in booking
-- confirm inventory reservation
-- cancel inventory reservation
-- keep reservation history for audit
+```text
+InventoryReservation
+  id
+  hotelId
+  roomTypeId
+  stayPeriod
+  rooms
+  status: HELD / CONFIRMED / CANCELLED / EXPIRED
+```
+
+Booking would store:
+
+```text
+inventoryReservationId
+```
 
 ---
 
-### RoomAvailability mutability style
+### Inventory concurrency
 
-`RoomAvailability` currently mostly uses immutable-style behavior where operations return a new instance.
+Inventory availability updates are not yet protected from concurrent lost updates.
 
-Examples:
+Risk example:
 
-- `placeHold(...)`
-- `releaseHold(...)`
-- `confirmHold(...)`
-- `releaseBookedRooms(...)`
+```text
+availableRooms = 1
 
-Before adding real persistence, the project should decide whether inventory entities should consistently use:
+Request A reads heldRooms = 0
+Request B reads heldRooms = 0
 
-- mutable entity-style methods
-- immutable replacement-style methods
+A saves heldRooms = 1
+B saves heldRooms = 1
 
-This should be clarified before implementing JDBC or Mongo repositories.
+Two holds exist, but availability shows only one held room
+```
 
----
+Future improvements:
 
-### Persistence readiness
+```text
+- optimistic locking for Mongo documents
+- conditional updates for availability reservation
+- retry policy for version conflicts
+- repository contract tests for concurrent reservation scenarios
+```
 
-Aggregates and repositories are currently optimized for in-memory storage.
-
-Before adding real persistence, the project should add:
-
-- restore or rehydration factory methods for aggregates
-- repository contract tests
-- persistence-specific adapter tests
-- transaction boundary decisions
-- optimistic locking strategy
-
-Potential aggregates/entities requiring restore methods:
-
-- `Booking`
-- `Hotel`
-- `RoomAvailability`
-- `RoomHold`
-
----
-
-### Repository contract tests
-
-Current tests mostly verify domain behavior and application service behavior.
-
-Now that real persistence adapters exist, repository contract tests should be introduced and aligned across implementations.
-
-The same contract should be reusable for different implementations.
-
-Example:
-
-- `InMemoryBookingRepositoryTest`
-- `JdbcBookingRepositoryTest`
-- `InMemoryHotelRepositoryTest`
-- `MongoHotelRepositoryAdapterTest`
-- `InMemoryRoomAvailabilityRepositoryTest`
-- `MongoRoomAvailabilityRepositoryAdapterTest`
-- `InMemoryRoomHoldRepositoryTest`
-- `MongoRoomHoldRepositoryAdapterTest`
-
-The goal is to make sure all repository implementations preserve the same observable behavior.
+This should be addressed before the project is considered portfolio-ready.
 
 ---
 
@@ -201,85 +377,268 @@ Current command operations are not idempotent.
 
 Examples:
 
-- confirming an already confirmed booking is rejected
-- cancelling an already cancelled booking is rejected
-- repeated HTTP calls may produce domain errors
+```text
+- repeated create booking requests can create multiple bookings
+- repeated confirm requests may produce domain errors
+- repeated cancel requests may produce domain errors
+- repeated Kafka events are not yet handled
+```
 
-This is acceptable for now.
+Future improvements:
 
-Real distributed systems usually need safer retry behavior, for example:
+```text
+- HTTP Idempotency-Key for booking creation
+- eventId-based consumer deduplication
+- inbox table for Kafka consumers
+- idempotent payment command handling
+- idempotent notification delivery handling
+```
 
-- idempotency keys
-- command identifiers
-- request deduplication
-- process state tracking
-
----
-
-### Event Storming alignment
-
-The Event Storming model should be updated after the latest lifecycle changes.
-
-The current implementation supports:
-
-- room hold placement
-- hold confirmation
-- hold release
-- confirmed booking cancellation
-- booked room release
-
-Future Event Storming updates should explicitly show the difference between:
-
-- cancelling a held booking
-- cancelling a confirmed booking
+This becomes especially important after Kafka and payment are introduced.
 
 ---
 
-### API semantics
+### Outbox and event publication
 
-The current cancellation endpoint is:
+The project does not yet have transactional outbox support.
 
-    POST /api/v1/bookings/{bookingId}/cancel
+Planned for `v0.6.0`:
 
-It now supports both held and confirmed bookings.
+```text
+- booking_outbox table
+- booking lifecycle events
+- event envelope
+- event versioning
+- booking transaction boundary
+```
 
-The endpoint does not physically delete a booking.
+Planned for `v0.6.1`:
 
-The API should continue to describe this operation as cancellation, not deletion.
+```text
+- outbox polling publisher
+- retries
+- status transitions
+- failure handling
+- locking strategy
+```
 
-Possible future improvements:
+Planned for `v0.7.0`:
 
-- add clearer OpenAPI descriptions
-- document valid state transitions
-- return more specific error codes for invalid transitions
+```text
+- Kafka infrastructure
+- publish booking events from outbox
+- topic naming convention
+- dead-letter topic strategy
+```
 
 ---
 
-### Error model
+### Inbox pattern
 
-Inventory-specific exceptions should not leak through booking flows.
+After Kafka consumers are introduced, consumers should be idempotent.
 
-Booking should expose booking-level errors to API clients.
+Future consumer services:
 
-The booking-inventory ACL adapter should continue translating inventory failures into booking application exceptions while preserving the original cause for diagnostics.
+```text
+notification-service
+payment-service
+audit-service
+booking-process-manager
+```
 
-Possible future improvements:
+Possible table:
 
-- introduce stable application error codes
-- separate domain errors from integration errors
-- improve error response consistency across modules
+```text
+processed_events
+  event_id
+  consumer_name
+  processed_at
+```
+
+This prevents duplicate processing when Kafka redelivers an event.
 
 ---
 
-## Planned next steps
+### Notification delivery
 
-Recommended next steps before persistence:
+Notification service is planned as an extensible service.
 
-1. Add application-level booking lifecycle scenario tests.
-2. Update Event Storming diagram to match the current implemented flow.
-3. Prepare aggregates for persistence.
-4. Add repository contract tests.
-5. Decide transaction strategy.
-6. Add PostgreSQL persistence foundation.
+Target channels:
 
-Persistence should not be added before the lifecycle rules are covered by tests.
+```text
+EMAIL
+TELEGRAM
+MAX
+```
+
+Notification failures should not cancel a successfully confirmed booking.
+
+Target principle:
+
+```text
+booking success does not depend on notification delivery success
+```
+
+Notification delivery should have its own status and retry model.
+
+---
+
+### Payment service
+
+Payment service is planned as a symbolic educational service.
+
+It does not need real bank integration.
+
+It should demonstrate:
+
+```text
+- payment aggregate
+- approve / decline / cancel operations
+- payment status transitions
+- payment events
+- failure path that triggers saga compensation
+```
+
+Possible statuses:
+
+```text
+CREATED
+APPROVED
+DECLINED
+CANCELLED
+```
+
+---
+
+### Saga / process manager
+
+Saga is planned after payment service foundation.
+
+Target approach:
+
+```text
+orchestrated saga / booking process manager
+```
+
+Reason:
+
+```text
+- explicit process state
+- explicit compensation logic
+- easier to explain in interviews
+- better for learning than pure choreography
+```
+
+The first implementation should be a lightweight custom process manager, not Temporal or Camunda.
+
+Temporal/Camunda may be evaluated later.
+
+---
+
+### Audit
+
+Audit is planned as a minimal symbolic service.
+
+It should consume cross-cutting events and store audit records.
+
+Audit should not block the main booking/payment process.
+
+If audit is down, producers and business services should continue working.
+
+---
+
+### Observability and resilience
+
+The project does not yet have centralized observability.
+
+Planned future work:
+
+```text
+- structured logs
+- correlationId and causationId in events
+- OpenTelemetry tracing
+- Prometheus metrics
+- Grafana dashboards
+- ELK/OpenSearch logs
+- gRPC deadlines
+- gRPC retries
+- Kafka consumer metrics
+```
+
+---
+
+### Contract and integration testing
+
+Current tests cover many domain and application scenarios, but service-level testing should be extended.
+
+Future improvements:
+
+```text
+- Testcontainers for PostgreSQL
+- Testcontainers for MongoDB
+- Testcontainers for Kafka
+- gRPC boundary tests
+- service-level integration tests
+- event contract tests
+- repository contract tests
+```
+
+---
+
+### Documentation and ADRs
+
+Architecture decisions should be documented as ADRs.
+
+Suggested ADRs:
+
+```text
+ADR-001: Modular architecture and bounded contexts
+ADR-002: PostgreSQL for booking and MongoDB for inventory
+ADR-003: Transactional outbox
+ADR-004: mTLS for service-to-service communication
+ADR-005: Saga orchestration over choreography
+ADR-006: Notification failures do not cancel bookings
+ADR-007: Symbolic payment provider for educational MVP
+```
+
+---
+
+## Roadmap
+
+```text
+v0.6.0
+  transactional outbox and booking lifecycle events
+
+v0.6.1
+  outbox polling publisher and retries
+
+v0.6.2
+  inventory gRPC mTLS
+
+v0.7.0
+  Kafka infrastructure and event publication
+
+v0.8.0
+  notification service foundation
+
+v0.9.0
+  symbolic payment service
+
+v0.10.0
+  booking process manager / saga and compensation
+
+v0.11.0
+  frontend or BFF with Google login
+
+v0.12.0
+  audit service
+
+v0.13.0
+  observability and resilience
+
+v0.14.0
+  service-level integration tests, CI, diagrams, ADRs
+
+v1.0.0
+  portfolio-ready release
+```

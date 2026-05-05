@@ -9,38 +9,80 @@ modular monolith
   -> explicit module boundaries
   -> gRPC boundary between modules
   -> separately runnable service applications
-  -> distributed consistency patterns
+  -> security and ownership model
+  -> transactional outbox
+  -> Kafka integration
+  -> saga/process manager
+  -> observability and resilience
 ```
 
-The main goal of the project is to practice Clean Architecture, DDD tactical patterns, modular design, persistence boundaries, transport contracts and the gradual transition from a modular monolith toward microservices.
-
-## Current stage: v0.4.0
-
-Starting from `v0.4.0`, the project is a **Gradle multi-project build** with two separately runnable Spring Boot applications:
-
-- `booking-service-app`
-- `inventory-service-app`
-
-The codebase is still one repository, but the runtime is no longer a single application.
-
-Booking and inventory are now started as separate applications and communicate through the gRPC boundary introduced in `v0.3.0`.
-
-Current focus:
-
-- Clean Architecture boundaries
-- DDD-style aggregates and value objects
-- explicit `booking` and `inventory` modules
-- separate Spring Boot applications for booking and inventory
-- PostgreSQL persistence for booking
-- MongoDB persistence for inventory
-- gRPC contract between booking and inventory
-- booking gRPC client adapter
-- inventory gRPC server adapter
-- room availability, room holds, booking confirmation and cancellation flows
+The main goal of the project is to practice Clean Architecture, DDD tactical patterns, modular design, persistence boundaries, transport contracts and the gradual transition from a modular monolith toward distributed services.
 
 The project is intentionally not production-ready yet.
 
-Transaction boundaries, cross-service consistency, outbox/events, retries, idempotency, security and observability are planned as future improvements.
+---
+
+## Current stage: v0.5.2
+
+Starting from `v0.5.0`, the booking service supports:
+
+```text
+Google JWT authentication
+internal application user mapping
+booking ownership checks
+Google JWT audience validation
+```
+
+Starting from `v0.5.2`, the project also clarifies the target security model:
+
+```text
+User / Frontend
+  -> Booking HTTP API
+  -> Google JWT
+
+Booking service
+  -> Inventory gRPC API
+  -> mTLS
+```
+
+Local development profiles must be activated explicitly.
+
+Public inventory catalog endpoints are available without authentication so that users can browse hotels, room types and availability before login.
+
+Booking creation and booking management require authentication.
+
+---
+
+## Project goals
+
+This project is not just a CRUD hotel booking application.
+
+The educational goal is to demonstrate senior-level backend topics:
+
+```text
+Clean Architecture
+DDD tactical patterns
+Hexagonal Architecture
+module boundaries
+anti-corruption layer
+PostgreSQL persistence
+MongoDB persistence
+gRPC integration
+Google JWT authentication
+booking ownership
+transactional outbox
+Kafka integration
+idempotency
+mTLS service-to-service security
+symbolic payment flow
+notification service
+saga/process manager
+audit events
+observability
+Testcontainers and integration testing
+```
+
+---
 
 ## Project structure
 
@@ -75,19 +117,53 @@ hotelbooking/
     inventory-grpc-api/
       build.gradle
       src/main/proto
+
+  docs/
+    security-model.md
+    technical-debt.md
+    logging-strategy.md
 ```
 
-### Applications
+---
+
+## Applications
+
+### booking-service-app
 
 `apps/booking-service-app` is the booking runtime application.
 
 It exposes the booking HTTP API, stores booking data in PostgreSQL and calls inventory through gRPC.
 
+Responsibilities:
+
+```text
+booking lifecycle
+booking ownership
+Google JWT based external user authentication
+PostgreSQL booking persistence
+gRPC client adapter to inventory
+```
+
+### inventory-service-app
+
 `apps/inventory-service-app` is the inventory runtime application.
 
 It exposes the inventory HTTP API, stores inventory data in MongoDB and exposes the inventory gRPC server.
 
-### Modules
+Responsibilities:
+
+```text
+hotel catalog
+room types
+room availability
+room holds
+MongoDB inventory persistence
+gRPC server adapter for booking integration
+```
+
+---
+
+## Modules
 
 `modules/booking` contains booking domain, booking application use cases, booking HTTP adapters, booking PostgreSQL persistence and booking gRPC client integration.
 
@@ -95,12 +171,14 @@ It exposes the inventory HTTP API, stores inventory data in MongoDB and exposes 
 
 `modules/inventory-grpc-api` contains the protobuf contract and generated gRPC Java API used by both booking and inventory.
 
+---
+
 ## Runtime architecture
 
 Current runtime flow:
 
 ```text
-Client / Swagger
+Client / Swagger / Future Frontend
   -> booking-service-app HTTP API :8080
   -> BookingController
   -> Booking application use case
@@ -146,6 +224,8 @@ Forbidden dependency:
 booking -> inventory domain/application
 ```
 
+---
+
 ## Booking lifecycle
 
 The booking module currently supports the following lifecycle:
@@ -168,37 +248,95 @@ Current supported transitions:
 A booking is not physically deleted when it is cancelled.
 Cancellation is represented by the `CANCELLED` status.
 
-## Module boundaries
+---
 
-The project is organized around explicit business modules.
+## Security model
 
-Main modules:
+The project separates external user authentication from internal service authentication.
 
-- `booking` — owns the booking lifecycle
-- `inventory` — owns hotels, room types, room availability and room holds
-- `inventory-grpc-api` — owns the public gRPC contract exposed by inventory
+Target model:
 
-The booking module does not depend on inventory domain objects directly.
+```text
+External user access:
+  User / Frontend
+    -> Booking HTTP API
+    -> Google JWT
 
-Booking integrates with inventory through booking outbound ports:
+Internal service access:
+  Booking service
+    -> Inventory gRPC API
+    -> mTLS
+```
 
-- `InventoryLookupPort`
-- `InventoryReservationPort`
+Google JWT is used for user identity and booking ownership.
 
-In the separated runtime these ports are implemented by gRPC client adapters.
+mTLS is the target model for booking-to-inventory gRPC communication.
 
-Inventory exposes gRPC server adapters that call inventory application use cases:
+More details:
 
-- `InventoryQueryUseCase`
-- `InventoryReservationUseCase`
+```text
+docs/security-model.md
+```
 
-The adapter between booking and inventory acts as an anti-corruption layer.
+---
+
+## Public browsing before login
+
+A user should be able to browse hotels, room types and availability before logging in.
+
+Public inventory catalog endpoints:
+
+```text
+GET /api/v1/hotels
+GET /api/v1/hotels/{hotelId}
+GET /api/v1/hotels/{hotelId}/room-types/{roomTypeId}/availability
+```
+
+Booking creation requires authentication:
+
+```text
+POST /api/v1/bookings
+```
+
+Intended user journey:
+
+```text
+browse hotels and availability anonymously
+  -> choose room type and stay period
+  -> login with Google
+  -> create booking
+  -> manage own booking
+```
+
+---
+
+## Inventory admin API
+
+Inventory administrative endpoints are intended for data setup and management.
+
+Examples:
+
+```text
+POST /api/v1/admin/hotels
+POST /api/v1/admin/hotels/{hotelId}/room-types
+POST /api/v1/admin/hotels/{hotelId}/room-types/{roomTypeId}/availability/initialization
+PUT  /api/v1/admin/hotels/{hotelId}/room-types/{roomTypeId}/availability/capacity
+```
+
+In local development, the `security-dev` profile provides a mock admin user with:
+
+```text
+ROLE_USER
+ROLE_ADMIN
+```
+
+This is not a production-grade admin authentication model.
+
+---
 
 ## Booking to inventory communication
 
-Starting from `v0.3.0`, booking-to-inventory communication uses gRPC.
-
-Starting from `v0.4.0`, booking and inventory are no longer started from a single Spring Boot application. They are separate Spring Boot applications in the same repository.
+Booking-to-inventory communication uses gRPC.
 
 Runtime communication:
 
@@ -230,24 +368,38 @@ modules/inventory-grpc-api/build/generated/sources/proto
 
 They are not committed to Git.
 
+---
+
 ## Current API behavior
 
 The current API supports:
 
-- registering hotels and room types
-- configuring room availability
-- querying room availability
-- creating bookings
-- confirming bookings
-- cancelling held bookings
-- cancelling confirmed bookings
-- retrieving booking details
+```text
+public hotel catalog browsing
+public room availability lookup
+admin hotel registration
+admin room type registration
+admin availability setup
+booking creation
+booking confirmation
+booking cancellation
+booking details lookup
+booking ownership checks
+```
 
 Booking cancellation behavior:
 
-- if the booking is `ON_HOLD`, cancellation releases the inventory hold
-- if the booking is `CONFIRMED`, cancellation releases booked inventory rooms
-- cancelled bookings remain stored with status `CANCELLED`
+```text
+if the booking is ON_HOLD
+  -> cancellation releases the inventory hold
+
+if the booking is CONFIRMED
+  -> cancellation releases booked inventory rooms
+
+cancelled bookings remain stored with status CANCELLED
+```
+
+---
 
 ## Running locally
 
@@ -262,13 +414,13 @@ docker compose up -d
 Start inventory service in one terminal:
 
 ```bash
-./gradlew :apps:inventory-service-app:bootRun
+./gradlew :apps:inventory-service-app:bootRun --args="--spring.profiles.active=local"
 ```
 
 On Windows:
 
 ```bash
-gradlew.bat :apps:inventory-service-app:bootRun
+gradlew.bat :apps:inventory-service-app:bootRun --args="--spring.profiles.active=local"
 ```
 
 Inventory service endpoints:
@@ -282,13 +434,13 @@ gRPC API:  localhost:9090
 Start booking service in another terminal:
 
 ```bash
-./gradlew :apps:booking-service-app:bootRun
+./gradlew :apps:booking-service-app:bootRun --args="--spring.profiles.active=local"
 ```
 
 On Windows:
 
 ```bash
-gradlew.bat :apps:booking-service-app:bootRun
+gradlew.bat :apps:booking-service-app:bootRun --args="--spring.profiles.active=local"
 ```
 
 Booking service endpoints:
@@ -299,6 +451,32 @@ Swagger:   http://localhost:8080/swagger-ui/index.html
 ```
 
 To create a booking through Swagger, start `inventory-service-app` first, then start `booking-service-app`.
+
+---
+
+## Local profiles
+
+Starting from `v0.5.2`, development profiles are activated explicitly through the `local` profile.
+
+Booking local profile expands to:
+
+```text
+booking-postgres
+inventory-grpc-client
+security-dev
+```
+
+Inventory local profile expands to:
+
+```text
+inventory-mongo
+inventory-grpc-server
+security-dev
+```
+
+This avoids silently starting services in development security mode by default.
+
+---
 
 ## Initializing demo inventory MongoDB data
 
@@ -320,7 +498,30 @@ Initialize demo data from Git Bash:
 docker compose exec -T mongo mongosh "mongodb://localhost:27017/hotelbooking" < docker/mongo/init/demo-data.js
 ```
 
-After this, use the booking Swagger UI to create a booking for the demo hotel and room type.
+After this, use the inventory Swagger UI to inspect public hotel catalog endpoints and the booking Swagger UI to create bookings.
+
+---
+
+## Swagger
+
+Inventory Swagger:
+
+```text
+http://localhost:8081/swagger-ui/index.html
+```
+
+Booking Swagger:
+
+```text
+http://localhost:8080/swagger-ui/index.html
+```
+
+Swagger remains part of the project even after a frontend or BFF is introduced.
+
+The future frontend is intended for demonstration and portfolio presentation.
+Swagger is intended for API exploration and manual testing.
+
+---
 
 ## Build and quality checks
 
@@ -363,11 +564,15 @@ Build service jars:
 ./gradlew :apps:booking-service-app:bootJar
 ```
 
+---
+
 ## Recommended Java version
 
 Java 21 LTS is recommended.
 
 The project may also run on newer JDKs, but newer non-LTS JDKs can produce warnings from gRPC/Netty about deprecated `sun.misc.Unsafe` memory access APIs.
+
+---
 
 ## Current limitations
 
@@ -375,13 +580,91 @@ This project is still a learning system.
 
 Known limitations:
 
-- no authentication yet
-- no user ownership for bookings yet
-- no distributed transaction handling
-- no outbox yet
-- no saga/process manager yet
-- no production-grade retry/idempotency model
-- no centralized observability yet
-- service-level integration tests need to be restored after application extraction
+```text
+no frontend login flow yet
+no service-to-service mTLS yet
+no distributed transaction handling
+no outbox yet
+no Kafka integration yet
+no saga/process manager yet
+no payment service yet
+no notification service yet
+no audit service yet
+no production-grade retry/idempotency model
+no centralized observability yet
+service-level integration tests need to be restored and extended
+```
 
+More details:
 
+```text
+docs/technical-debt.md
+```
+
+---
+
+## Roadmap
+
+```text
+v0.6.0
+  transactional outbox and booking lifecycle events
+
+v0.6.1
+  outbox polling publisher and retries
+
+v0.6.2
+  inventory gRPC mTLS
+
+v0.7.0
+  Kafka infrastructure and event publication
+
+v0.8.0
+  notification service foundation
+
+v0.9.0
+  symbolic payment service
+
+v0.10.0
+  booking process manager / saga and compensation
+
+v0.11.0
+  frontend or BFF with Google login
+
+v0.12.0
+  audit service
+
+v0.13.0
+  observability and resilience
+
+v0.14.0
+  service-level integration tests, CI, diagrams, ADRs
+
+v1.0.0
+  portfolio-ready release
+```
+
+---
+
+## Portfolio positioning
+
+The project can be presented as:
+
+```text
+Educational distributed booking platform demonstrating Clean Architecture, DDD,
+transactional outbox, Kafka-based integration, mTLS service-to-service security,
+saga orchestration, idempotency, observability and production-oriented testing.
+```
+
+The focus is not only on Spring Boot, but on architectural trade-offs:
+
+```text
+service boundaries
+data ownership
+consistency
+transactions
+security
+event-driven integration
+failure handling
+observability
+testing strategy
+```
