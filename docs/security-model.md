@@ -2,455 +2,291 @@
 
 ## Purpose
 
-The project uses security to answer four different questions:
+This document describes the current and target security model for the hotel booking project.
+
+The project intentionally separates two concerns:
 
 ```text
-Authentication
-  Who is the caller?
+External user authentication
+  User / Frontend -> Booking HTTP API
 
-Authorization
-  What is the caller allowed to do?
-
-Ownership
-  Does this booking belong to this user?
-
-Service trust
-  How do internal services communicate?
+Internal service authentication
+  Booking service -> Inventory gRPC API
 ```
 
-The current security scope is focused on the booking and inventory service applications.
+These concerns should not be solved by the same mechanism.
 
-## Current services
+---
+
+## Target security model
+
+The target model is:
 
 ```text
-booking-service-app
-inventory-service-app
+External user access:
+  User / Frontend
+    -> Booking HTTP API
+    -> Google JWT
+
+Internal service access:
+  Booking service
+    -> Inventory gRPC API
+    -> mTLS
 ```
 
-Booking communicates with inventory through gRPC.
+Google JWT is used to identify the external user and map that user to an internal application user.
 
-The user-facing security boundary is currently HTTP API security.
+mTLS is the target mechanism for internal booking-to-inventory communication.
 
-The gRPC service-to-service boundary is still trusted/internal and will be hardened later.
+Booking should not forward user JWT tokens to inventory as the main service-to-service authentication mechanism.
 
-## Security profiles
+---
 
-The project supports two security profiles:
+## Current state
+
+The booking service supports Google JWT authentication in the `security-jwt` profile.
+
+The booking service maps an authenticated Google user to an internal application user and uses the internal user id for booking ownership checks.
+
+The inventory service still contains HTTP security profiles from earlier learning stages:
 
 ```text
 security-dev
 security-jwt
 ```
 
-Only one of them should be active at the same time.
+The inventory HTTP API is used for public catalog browsing and administrative data setup.
 
-## security-dev
+The booking-to-inventory gRPC boundary is not yet protected by mTLS. This is planned for a later release.
 
-`security-dev` is the default local development profile.
+---
 
-It is used for local Swagger testing without a real JWT token.
+## Public browsing before login
 
-Example default booking service profiles:
+The user should be able to browse hotels, room types and availability before logging in.
 
-```yaml
-spring:
-  profiles:
-    active:
-      - booking-postgres
-      - inventory-grpc-client
-      - security-dev
-```
-
-In this mode:
+Public inventory catalog endpoints:
 
 ```text
-DevSecurityAuthenticationFilter
-  creates an authenticated Spring Security user
-
-DevCurrentUserProvider
-  returns a local development user
-
-The development user has USER and ADMIN privileges
+GET /api/v1/hotels
+GET /api/v1/hotels/{hotelId}
+GET /api/v1/hotels/{hotelId}/room-types/{roomTypeId}/availability
 ```
 
-This allows local testing through Swagger without Google OAuth2 setup.
+These endpoints are intentionally public.
 
-## security-jwt
-
-`security-jwt` is the production-like profile.
-
-Run booking service in JWT mode:
-
-```bash
-./gradlew :apps:booking-service-app:bootRun --args="--spring.profiles.active=booking-postgres,inventory-grpc-client,security-jwt"
-```
-
-On Windows:
-
-```bash
-gradlew.bat :apps:booking-service-app:bootRun --args="--spring.profiles.active=booking-postgres,inventory-grpc-client,security-jwt"
-```
-
-Run inventory service in JWT mode:
-
-```bash
-./gradlew :apps:inventory-service-app:bootRun --args="--spring.profiles.active=inventory-mongo,inventory-grpc-server,security-jwt"
-```
-
-On Windows:
-
-```bash
-gradlew.bat :apps:inventory-service-app:bootRun --args="--spring.profiles.active=inventory-mongo,inventory-grpc-server,security-jwt"
-```
-
-In this mode protected endpoints require:
-
-```http
-Authorization: Bearer <JWT>
-```
-
-JWT configuration is stored in:
+Booking creation is different:
 
 ```text
-application-security-jwt.yaml
+POST /api/v1/bookings
 ```
 
-Example:
+Creating a booking requires an authenticated user because booking ownership must be assigned to an internal `UserId`.
 
-```yaml
-spring:
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: https://accounts.google.com
-```
-
-Spring Security validates JWT tokens using Google OpenID Connect metadata and public keys.
-
-## Why fake JWT tokens do not work
-
-A JWT is not accepted just because it has a valid-looking structure.
-
-In `security-jwt` mode, the service validates:
+The intended user journey is:
 
 ```text
-issuer
-signature
-public key
-expiration
-claims
+browse hotels and availability anonymously
+  -> choose room type and stay period
+  -> login with Google
+  -> create booking
+  -> manage own booking
 ```
 
-A manually created token such as:
+---
+
+## Booking ownership
+
+Bookings belong to internal application users, not directly to Google accounts.
+
+The intended mapping is:
 
 ```text
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
-
-is rejected because it was not issued and signed by Google.
-
-Expected behavior:
-
-```text
-No token
-  -> 401 Unauthorized
-
-Fake token
-  -> 401 Unauthorized
-
-Valid Google JWT with USER role
-  -> allowed for USER endpoints
-  -> forbidden for ADMIN endpoints
-```
-
-## Local user model
-
-The project uses a local user account model.
-
-External identity providers should not leak directly into the booking domain.
-
-Current mapping:
-
-```text
-Google JWT
-  -> provider = GOOGLE
-  -> provider_subject = JWT subject
-  -> local app_user
+Google JWT subject/email
+  -> app_users
   -> internal UserId
   -> Booking.userId
 ```
 
-Booking stores only internal `UserId`.
+Booking ownership checks are enforced by the booking application layer.
 
-Booking does not store Google subject, Google email or OAuth2 provider details directly.
+A user should be able to access only their own bookings unless they have an administrative role.
 
-## Booking ownership
+---
 
-Booking has an owner:
+## HTTP security rules
 
-```text
-Booking.userId
-```
+### Booking HTTP API
 
-The request body does not accept `userId`.
-
-This is intentional.
-
-Bad API design:
-
-```json
-{
-  "userId": "...",
-  "hotelId": "...",
-  "roomTypeId": "..."
-}
-```
-
-Good API design:
+Public endpoints:
 
 ```text
-userId comes from authenticated security context
+GET /swagger-ui.html
+GET /swagger-ui/**
+GET /v3/api-docs/**
+GET /v3/api-docs.yaml
 ```
 
-The booking service checks ownership in application use cases.
-
-Example rule:
-
-```text
-Only the owner of a booking can read, confirm or cancel that booking.
-```
-
-This rule is not implemented only at URL level.
-
-Spring Security checks coarse-grained access:
-
-```text
-Is the caller authenticated?
-Does the caller have USER or ADMIN role?
-```
-
-The booking application layer checks fine-grained ownership:
-
-```text
-Does this booking belong to this user?
-```
-
-## Roles
-
-Current roles:
-
-```text
-USER
-ADMIN
-```
-
-USER can:
-
-```text
-create booking
-view own booking
-confirm own booking
-cancel own booking
-```
-
-ADMIN can:
-
-```text
-access admin endpoints
-manage inventory
-```
-
-Current limitation:
-
-```text
-Google JWT does not contain project-specific ADMIN role.
-```
-
-Therefore, project roles are stored in local `app_users`.
-
-## Booking service authorization
-
-Booking service protects booking operations.
-
-Examples:
+Protected endpoints:
 
 ```text
 POST /api/v1/bookings
-  requires USER or ADMIN
-
-GET /api/v1/bookings/{bookingId}
-  requires USER or ADMIN
-  also requires booking ownership
-
-POST /api/v1/bookings/{bookingId}/confirm
-  requires USER or ADMIN
-  also requires booking ownership
-
-POST /api/v1/bookings/{bookingId}/cancel
-  requires USER or ADMIN
-  also requires booking ownership
+GET  /api/v1/bookings/**
+POST /api/v1/bookings/**
+PUT  /api/v1/bookings/**
+DELETE /api/v1/bookings/**
 ```
 
-## Inventory service authorization
-
-Inventory service protects admin endpoints.
-
-Examples:
+Booking endpoints require:
 
 ```text
-/api/v1/admin/**
-  requires ADMIN
+ROLE_USER or ROLE_ADMIN
 ```
 
-Public inventory read endpoints can remain open.
+Any unmatched booking HTTP request should be denied by default.
 
-Examples:
+### Inventory HTTP API
+
+Public endpoints:
 
 ```text
-hotel search
-room type reference lookup
-availability query
+GET /swagger-ui.html
+GET /swagger-ui/**
+GET /v3/api-docs/**
+GET /v3/api-docs.yaml
+
+GET /api/v1/hotels
+GET /api/v1/hotels/**
 ```
 
-## Service-to-service communication
+Administrative endpoints:
 
-Booking calls inventory through gRPC.
+```text
+POST /api/v1/admin/hotels
+POST /api/v1/admin/hotels/{hotelId}/room-types
+POST /api/v1/admin/hotels/{hotelId}/room-types/{roomTypeId}/availability/initialization
+PUT  /api/v1/admin/hotels/{hotelId}/room-types/{roomTypeId}/availability/capacity
+```
 
-Current state:
+Administrative endpoints require:
+
+```text
+ROLE_ADMIN
+```
+
+Any unmatched inventory HTTP request should be denied by default.
+
+---
+
+## Development admin access
+
+Inventory administrative HTTP endpoints are protected by `ROLE_ADMIN`.
+
+In local development, the `security-dev` profile installs a development authentication filter.
+This filter automatically authenticates requests as a mock administrator:
+
+```text
+username: dev-admin
+roles: ROLE_USER, ROLE_ADMIN
+```
+
+This is intended only for local development and demo data setup through Swagger.
+
+Example local inventory startup:
+
+```bash
+./gradlew :apps:inventory-service-app:bootRun --args="--spring.profiles.active=local"
+```
+
+When the local profile includes `security-dev`, inventory admin endpoints can be used from Swagger without a real login flow.
+
+This is not a production-grade admin authentication model.
+
+---
+
+## Inventory JWT profile
+
+The inventory service still contains an HTTP JWT security profile from an earlier learning stage.
+
+This profile is transitional and is not the target mechanism for booking-to-inventory communication.
+
+Target model:
+
+```text
+booking-service -> inventory-service gRPC -> mTLS
+```
+
+The inventory HTTP API keeps public catalog endpoints open and protects administrative endpoints.
+
+A production-grade inventory admin authentication model is intentionally not implemented yet.
+
+---
+
+## Planned mTLS model
+
+The planned internal service security model is:
 
 ```text
 booking-service-app
-  -> inventory-service-app gRPC
+  has client certificate
+
+inventory-service-app
+  has server certificate
+  trusts the internal CA
+  requires client certificate
+  accepts calls only from allowed service identities
 ```
 
-The gRPC boundary is currently trusted/internal.
-
-Inventory does not know who owns a booking.
-
-This is intentional.
-
-Booking owns booking authorization and ownership checks.
-
-Inventory owns inventory rules:
+Potential service identity examples:
 
 ```text
-hotel exists
-room type exists
-availability exists
-hold can be placed
-hold can be confirmed
-hold can be released
-booked rooms can be released
+CN=booking-service
+SAN DNS=booking-service
+SAN URI=spiffe://hotelbooking/booking-service
 ```
 
-Future improvements:
+For the educational version, a simple internal CA and service certificates are enough.
+
+SPIFFE/SPIRE can be considered later, but is not required for the first mTLS implementation.
+
+---
+
+## Inventory gRPC authorization rule
+
+Inventory gRPC operations should allow only trusted internal services.
+
+Initial rule:
 
 ```text
-service-to-service token
-mTLS
-service mesh
-gRPC metadata propagation
+booking-service may call inventory reservation and lookup gRPC methods
+unknown service identities are rejected
 ```
 
-## Why inventory does not check booking ownership
+The inventory service should authenticate the calling service by its client certificate.
 
-Inventory is a separate bounded context.
-
-It should not decide:
-
-```text
-Can this user cancel this booking?
-```
-
-That rule belongs to booking.
-
-Inventory decides:
-
-```text
-Can this room hold be released?
-Can this confirmed reservation be cancelled from inventory?
-```
-
-## Production-like direction
-
-The intended production-like model is:
-
-```text
-Frontend
-  -> Google login / OIDC
-  -> receives JWT / ID token
-  -> calls booking-service with Bearer token
-
-booking-service
-  -> validates JWT
-  -> maps external identity to local app_user
-  -> uses internal UserId
-  -> checks booking ownership
-  -> calls inventory through internal gRPC
-
-inventory-service
-  -> protects admin HTTP endpoints
-  -> exposes internal gRPC operations
-```
-
-## Manual verification
-
-The security flow was manually verified with real Google ID tokens obtained through OAuth 2.0 Playground.
-
-Verified booking-service behavior:
-
-```text
-Valid Google ID token
-  -> accepted by booking-service-app in security-jwt profile
-  -> mapped to local app_users record
-  -> used as internal Booking.userId
-
-Verified ownership behavior:
-User A
-  -> can create booking
-  -> can read own booking
-  -> can cancel own booking
-User B
-  -> cannot read User A booking
-  -> cannot cancel User A booking
-  -> receives 403 Forbidden
-
-Verified inventory-service behavior in security-jwt profile:
-No token
-  -> 401 Unauthorized
-Fake JWT
-  -> 401 Unauthorized
-Valid Google ID token without ADMIN role
-  -> 403 Forbidden for /api/v1/admin/**
-```  
-
-## Current limitations
-
-The current implementation is still educational.
-
-Known limitations:
-
-```text
-No frontend login flow yet
-No refresh token flow yet
-No service-to-service authentication yet
-No mTLS yet
-No API gateway / BFF yet
-Admin role management is minimal
-Google OAuth2 setup is not fully automated
-```
+---
 
 ## Future work
 
-Planned improvements:
+Planned for `v0.6.2`:
 
 ```text
-Frontend login with Google
-Swagger OAuth2 authorization support
-Role administration
-Service-to-service authentication
-Correlation ID propagation
-Audit logging
-Security tests
+- generate local development CA
+- generate booking service client certificate
+- generate inventory service server certificate
+- configure inventory gRPC server to require client certificates
+- configure booking gRPC client with client certificate and trust store
+- validate booking-service identity from the client certificate
+- document local certificate generation
+- add a negative test for rejected unauthenticated gRPC clients
+```
+
+Later improvements:
+
+```text
+- production-grade inventory admin authentication
+- service identity documentation
+- certificate rotation strategy
+- optional SPIFFE/SPIRE evaluation
+- audit events for security-sensitive actions
 ```

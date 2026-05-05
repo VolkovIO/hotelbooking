@@ -13,7 +13,7 @@ import org.springframework.context.annotation.Configuration;
     info =
         @Info(
             title = "Booking Service API",
-            version = "v0.5.0",
+            version = "v0.5.2",
             description = "Booking service API with JWT bearer authentication support."),
     security = @SecurityRequirement(name = "bearerAuth"))
 @SecurityScheme(

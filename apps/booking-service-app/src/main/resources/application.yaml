@@ -5,10 +5,11 @@ spring:
     ansi:
       enabled: ALWAYS
   profiles:
-    active:
-      - booking-postgres
-      - inventory-grpc-client
-      - security-dev
+    group:
+      local:
+        - booking-postgres
+        - inventory-grpc-client
+        - security-dev
   datasource:
     url: jdbc:postgresql://localhost:5432/hotelbooking
     username: hotelbooking
