@@ -1,6 +1,7 @@
 package com.example.hotelbooking.booking.application.service;
 
 import com.example.hotelbooking.booking.application.command.CancelBookingCommand;
+import com.example.hotelbooking.booking.application.event.BookingLifecycleEvent;
 import com.example.hotelbooking.booking.application.exception.BookingAccessDeniedException;
 import com.example.hotelbooking.booking.application.exception.BookingNotFoundException;
 import com.example.hotelbooking.booking.application.port.in.CancelBookingUseCase;
@@ -8,6 +9,7 @@ import com.example.hotelbooking.booking.application.port.out.BookingRepository;
 import com.example.hotelbooking.booking.application.port.out.InventoryReservationPort;
 import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.booking.domain.BookingDomainException;
+import com.example.hotelbooking.booking.domain.BookingStatus;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,6 +24,7 @@ public class CancelBookingService implements CancelBookingUseCase {
 
   private final BookingRepository bookingRepository;
   private final InventoryReservationPort inventoryReservationPort;
+  private final BookingStateChangePersistenceService bookingStateChangePersistenceService;
 
   @Override
   public Booking execute(CancelBookingCommand command) {
@@ -39,6 +42,8 @@ public class CancelBookingService implements CancelBookingUseCase {
       throw new BookingAccessDeniedException(command.bookingId());
     }
 
+    BookingStatus previousStatus = booking.getStatus();
+
     log.debug(
         "Booking cancellation flow selected: bookingId={}, currentStatus={}",
         booking.getId(),
@@ -52,7 +57,9 @@ public class CancelBookingService implements CancelBookingUseCase {
       throw new BookingDomainException("Only ON_HOLD or CONFIRMED booking can be cancelled");
     }
 
-    Booking savedBooking = bookingRepository.save(booking);
+    Booking savedBooking =
+        bookingStateChangePersistenceService.persist(
+            booking, BookingLifecycleEvent.cancelled(booking, previousStatus));
 
     log.info(
         "Booking cancelled: bookingId={}, userId={}, status={}",

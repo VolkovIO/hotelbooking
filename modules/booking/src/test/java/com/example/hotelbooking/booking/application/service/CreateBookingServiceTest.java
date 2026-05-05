@@ -7,7 +7,6 @@ import static org.mockito.Mockito.when;
 import com.example.hotelbooking.booking.application.command.CreateBookingCommand;
 import com.example.hotelbooking.booking.application.exception.GuestCountExceedsRoomCapacityException;
 import com.example.hotelbooking.booking.application.exception.RoomTypeReferenceNotFoundException;
-import com.example.hotelbooking.booking.application.port.out.BookingRepository;
 import com.example.hotelbooking.booking.application.port.out.InventoryLookupPort;
 import com.example.hotelbooking.booking.application.port.out.InventoryReservationPort;
 import com.example.hotelbooking.booking.application.port.out.RoomTypeReference;
@@ -25,7 +24,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class CreateBookingServiceTest {
 
-  @Mock private BookingRepository bookingRepository;
+  @Mock private BookingStateChangePersistenceService bookingStateChangePersistenceService;
 
   @Mock private InventoryLookupPort inventoryLookupPort;
 
@@ -45,7 +44,8 @@ class CreateBookingServiceTest {
             2);
 
     assertThrows(BookingDomainException.class, () -> service.execute(command));
-    verifyNoInteractions(inventoryLookupPort, inventoryReservationPort, bookingRepository);
+    verifyNoInteractions(
+        inventoryLookupPort, inventoryReservationPort, bookingStateChangePersistenceService);
   }
 
   @Test
@@ -62,7 +62,7 @@ class CreateBookingServiceTest {
 
     assertThrows(GuestCountExceedsRoomCapacityException.class, () -> service.execute(command));
 
-    verifyNoInteractions(inventoryReservationPort, bookingRepository);
+    verifyNoInteractions(inventoryReservationPort, bookingStateChangePersistenceService);
   }
 
   @Test
@@ -79,7 +79,7 @@ class CreateBookingServiceTest {
 
     assertThrows(RoomTypeReferenceNotFoundException.class, () -> service.execute(command));
 
-    verifyNoInteractions(inventoryReservationPort, bookingRepository);
+    verifyNoInteractions(inventoryReservationPort, bookingStateChangePersistenceService);
   }
 
   private UserId userId() {
