@@ -10,6 +10,8 @@ spring:
         - booking-postgres
         - inventory-grpc-client
         - security-dev
+        - outbox-publisher
+        - outbox-logging
   datasource:
     url: jdbc:postgresql://localhost:5432/hotelbooking
     username: hotelbooking
@@ -27,3 +29,12 @@ inventory:
     client:
       host: localhost
       port: 9090
+
+app:
+  booking:
+    outbox:
+      publisher:
+        batch-size: ${BOOKING_OUTBOX_BATCH_SIZE:10}
+        fixed-delay-ms: ${BOOKING_OUTBOX_FIXED_DELAY_MS:5000}
+        max-attempts: ${BOOKING_OUTBOX_MAX_ATTEMPTS:3}
+        retry-delay: ${BOOKING_OUTBOX_RETRY_DELAY:PT30S}
