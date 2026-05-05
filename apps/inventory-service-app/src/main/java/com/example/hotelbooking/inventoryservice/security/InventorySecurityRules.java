@@ -1,5 +1,6 @@
 package com.example.hotelbooking.inventoryservice.security;
 
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AuthorizeHttpRequestsConfigurer;
 
@@ -14,9 +15,11 @@ final class InventorySecurityRules {
         .requestMatchers(
             "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**", "/v3/api-docs.yaml")
         .permitAll()
+        .requestMatchers(HttpMethod.GET, "/api/v1/hotels", "/api/v1/hotels/**")
+        .permitAll()
         .requestMatchers("/api/v1/admin/**")
         .hasRole("ADMIN")
         .anyRequest()
-        .permitAll();
+        .denyAll();
   }
 }

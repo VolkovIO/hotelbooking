@@ -20,6 +20,6 @@ final class BookingSecurityRules {
         .requestMatchers("/api/v1/bookings/**")
         .hasAnyRole("USER", "ADMIN")
         .anyRequest()
-        .permitAll();
+        .denyAll();
   }
 }
