@@ -5,10 +5,11 @@ spring:
     ansi:
       enabled: ALWAYS
   profiles:
-    active:
-      - inventory-mongo
-      - inventory-grpc-server
-      - security-dev
+    group:
+      local:
+        - inventory-mongo
+        - inventory-grpc-server
+        - security-dev
   data:
     mongodb:
       uri: ${MONGODB_URI:mongodb://localhost:27017/hotelbooking}
