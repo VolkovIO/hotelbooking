@@ -22,7 +22,7 @@ The project is intentionally not production-ready yet.
 
 ---
 
-## Current stage: v0.5.2
+## Current stage: v0.6.0
 
 Starting from `v0.5.0`, the booking service supports:
 
@@ -45,12 +45,18 @@ Booking service
   -> mTLS
 ```
 
+Starting from `v0.6.0`, the booking service records lifecycle events in a transactional outbox.
+
+```text
+The current outbox implementation writes events to PostgreSQL but does not publish them yet.
+Outbox polling and Kafka publication are planned for later releases.
+
 Local development profiles must be activated explicitly.
 
 Public inventory catalog endpoints are available without authentication so that users can browse hotels, room types and availability before login.
 
 Booking creation and booking management require authentication.
-
+```
 ---
 
 ## Project goals

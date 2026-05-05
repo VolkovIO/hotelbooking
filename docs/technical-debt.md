@@ -2,7 +2,7 @@
 
 ## Current version
 
-`v0.5.2`
+`v0.6.0`
 
 The project is a learning-oriented backend for hotel booking.
 
@@ -20,7 +20,8 @@ separate booking and inventory service applications
   -> gRPC boundary between booking and inventory
   -> Google JWT for external booking API access
   -> booking ownership checks
-  -> preparation for transactional outbox, Kafka, mTLS and saga
+  -> transactional outbox foundation
+  -> preparation for outbox publisher, Kafka, mTLS and saga
 ```
 
 ---
@@ -31,19 +32,23 @@ separate booking and inventory service applications
 create booking
   -> place inventory hold
   -> booking becomes ON_HOLD
+  -> booking outbox event is stored
 
 confirm booking
   -> confirm inventory hold
   -> held rooms become booked rooms
   -> booking becomes CONFIRMED
+  -> booking outbox event is stored
 
 cancel ON_HOLD booking
   -> release inventory hold
   -> booking becomes CANCELLED
+  -> booking outbox event is stored
 
 cancel CONFIRMED booking
   -> release booked inventory rooms
   -> booking becomes CANCELLED
+  -> booking outbox event is stored
 ```
 
 A cancelled booking is not physically deleted. Cancellation is represented by the `CANCELLED` status.
@@ -159,13 +164,45 @@ Local development is started with:
 
 ---
 
-## v0.5.2 technical debt snapshot
+### Transactional outbox foundation
+
+Starting from `v0.6.0`, the booking service stores booking lifecycle events in a transactional outbox.
+
+Implemented:
+
+```text
+booking_outbox table
+booking lifecycle event model
+booking outbox repository
+booking state + outbox event persistence in one PostgreSQL transaction
+```
+
+Current event types:
+
+```text
+BookingPlacedOnHold
+BookingConfirmed
+BookingCancelled
+```
+
+The transaction boundary is intentionally local to PostgreSQL:
+
+```text
+Booking aggregate save
+  + booking_outbox insert
+```
+
+This is now handled atomically.
+
+---
+
+## v0.6.0 technical debt snapshot
 
 ### Cross-service consistency
 
 Booking and inventory are persisted in different databases.
 
-Current booking flow still performs synchronous inventory operations and booking persistence in separate resources.
+Current booking flow still performs inventory operations before booking state persistence.
 
 Known risk:
 
@@ -191,42 +228,132 @@ booking cancellation save fails
 => inventory and booking statuses diverge
 ```
 
+The transactional outbox does not solve cross-service atomicity by itself.
+
+It guarantees only this local atomic operation:
+
+```text
+booking state change
+  + booking outbox event insert
+```
+
+The larger distributed consistency problem is intentionally left for the saga/process manager work.
+
 Planned improvements:
 
 ```text
-v0.6.0 transactional outbox
+v0.6.1 outbox polling publisher
 v0.7.0 Kafka event publication
 v0.10.0 booking process manager / saga
 ```
 
-The transactional outbox will not solve cross-service atomicity by itself.
-It will guarantee that booking state changes and booking events are persisted atomically in the booking database.
+---
 
-The saga/process manager will address the larger distributed workflow.
+### Outbox publication
+
+The project has the first transactional outbox foundation, but it does not publish events yet.
+
+Implemented:
+
+```text
+- booking_outbox table
+- booking lifecycle event model
+- booking outbox repository
+- atomic booking state + outbox persistence
+```
+
+Not implemented yet:
+
+```text
+- outbox polling publisher
+- event status transitions after publication
+- retries
+- failure handling
+- Kafka publication
+- dead-letter topic
+```
+
+Planned for `v0.6.1`:
+
+```text
+- polling publisher
+- batch selection
+- retry attempts
+- status transitions
+- failure recording
+- SKIP LOCKED based locking
+```
+
+Planned for `v0.7.0`:
+
+```text
+- Kafka producer
+- booking.events topic
+- event envelope publication
+- dead-letter strategy
+```
 
 ---
 
 ### Transaction boundaries
 
-Booking use cases need explicit transaction boundaries.
+Booking state and outbox event persistence now have a dedicated transactional boundary.
 
-This becomes critical when the transactional outbox is introduced.
-
-Target rule for `v0.6.0`:
+The important rule is:
 
 ```text
-booking state change + outbox insert
-must be committed in the same PostgreSQL transaction
+bookingRepository.save(...)
+bookingOutboxRepository.save(...)
 ```
 
-Possible implementation options:
+must either both commit or both roll back.
+
+Current implementation keeps the PostgreSQL transaction away from remote gRPC calls.
+
+Current order:
 
 ```text
-- use Spring @Transactional on application services
-- introduce an application-level TransactionRunner port
+call inventory
+  -> change booking state
+  -> persist booking and outbox in one local transaction
 ```
 
-For the current learning stage, Spring `@Transactional` on booking application services is acceptable.
+This avoids long database transactions around network operations.
+
+Remaining issue:
+
+```text
+the inventory operation is still outside the booking database transaction
+```
+
+This is expected until saga/process manager work.
+
+---
+
+### Event contract maturity
+
+Current booking outbox events are application-level lifecycle events.
+
+They are not yet part of a full event contract strategy.
+
+Future improvements:
+
+```text
+- event envelope standardization
+- correlationId
+- causationId
+- event schema documentation
+- event compatibility rules
+- Kafka topic naming convention
+```
+
+Current event version:
+
+```text
+1
+```
+
+Event versioning should be preserved as consumers are introduced.
 
 ---
 
@@ -272,7 +399,7 @@ Future options:
 - internal-only admin API
 ```
 
-This is not urgent before outbox, Kafka, mTLS and saga.
+This is not urgent before outbox publisher, Kafka, mTLS and saga.
 
 ---
 
@@ -381,7 +508,7 @@ Examples:
 - repeated create booking requests can create multiple bookings
 - repeated confirm requests may produce domain errors
 - repeated cancel requests may produce domain errors
-- repeated Kafka events are not yet handled
+- repeated future Kafka events will need deduplication
 ```
 
 Future improvements:
@@ -395,41 +522,6 @@ Future improvements:
 ```
 
 This becomes especially important after Kafka and payment are introduced.
-
----
-
-### Outbox and event publication
-
-The project does not yet have transactional outbox support.
-
-Planned for `v0.6.0`:
-
-```text
-- booking_outbox table
-- booking lifecycle events
-- event envelope
-- event versioning
-- booking transaction boundary
-```
-
-Planned for `v0.6.1`:
-
-```text
-- outbox polling publisher
-- retries
-- status transitions
-- failure handling
-- locking strategy
-```
-
-Planned for `v0.7.0`:
-
-```text
-- Kafka infrastructure
-- publish booking events from outbox
-- topic naming convention
-- dead-letter topic strategy
-```
 
 ---
 
@@ -606,9 +698,6 @@ ADR-007: Symbolic payment provider for educational MVP
 ## Roadmap
 
 ```text
-v0.6.0
-  transactional outbox and booking lifecycle events
-
 v0.6.1
   outbox polling publisher and retries
 
