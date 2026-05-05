@@ -12,6 +12,13 @@ spring:
         - security-dev
         - outbox-publisher
         - outbox-logging
+      local-jwt:
+        - booking-postgres
+        - inventory-grpc-client
+        - security-jwt
+        - outbox-publisher
+        - outbox-logging
+
   datasource:
     url: jdbc:postgresql://localhost:5432/hotelbooking
     username: hotelbooking
