@@ -1,6 +1,7 @@
 package com.example.hotelbooking.booking.application.service;
 
 import com.example.hotelbooking.booking.application.command.ConfirmBookingCommand;
+import com.example.hotelbooking.booking.application.event.BookingLifecycleEvent;
 import com.example.hotelbooking.booking.application.exception.BookingAccessDeniedException;
 import com.example.hotelbooking.booking.application.exception.BookingNotFoundException;
 import com.example.hotelbooking.booking.application.port.in.ConfirmBookingUseCase;
@@ -20,6 +21,7 @@ public class ConfirmBookingService implements ConfirmBookingUseCase {
 
   private final BookingRepository bookingRepository;
   private final InventoryReservationPort inventoryReservationPort;
+  private final BookingStateChangePersistenceService bookingStateChangePersistenceService;
 
   @Override
   public Booking execute(ConfirmBookingCommand command) {
@@ -45,7 +47,9 @@ public class ConfirmBookingService implements ConfirmBookingUseCase {
 
     booking.confirmHeldBooking();
 
-    Booking savedBooking = bookingRepository.save(booking);
+    Booking savedBooking =
+        bookingStateChangePersistenceService.persist(
+            booking, BookingLifecycleEvent.confirmed(booking, holdId));
 
     log.info(
         "Booking confirmed: bookingId={}, status={}",
