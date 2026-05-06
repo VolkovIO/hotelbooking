@@ -222,33 +222,36 @@ A production-grade inventory admin authentication model is intentionally not imp
 
 ---
 
-## Planned mTLS model
 
-The planned internal service security model is:
+## Inventory service-to-service authentication
 
-```text
-booking-service-app
-  has client certificate
+Booking-to-inventory gRPC communication uses mTLS in local development.
 
-inventory-service-app
-  has server certificate
-  trusts the internal CA
-  requires client certificate
-  accepts calls only from allowed service identities
-```
+Inventory gRPC server:
 
-Potential service identity examples:
+- uses the `inventory-service` server certificate
+- trusts the local development CA
+- requires client certificates
+- accepts only the `booking-service` client identity
 
-```text
-CN=booking-service
-SAN DNS=booking-service
-SAN URI=spiffe://hotelbooking/booking-service
-```
+Current allowed client identity:
 
-For the educational version, a simple internal CA and service certificates are enough.
+- `CN=booking-service`
 
-SPIFFE/SPIRE can be considered later, but is not required for the first mTLS implementation.
+This means user JWT tokens are not forwarded from booking to inventory.
 
+The booking service authenticates users.
+The inventory service authenticates calling services.
+
+## Inventory JWT profile
+
+The inventory JWT profile was removed.
+
+Reason:
+
+- inventory JWT was not the target service-to-service security model
+- booking-to-inventory communication should use mTLS
+- inventory HTTP admin access is still local/demo only through `security-dev`
 ---
 
 ## Inventory gRPC authorization rule
@@ -268,7 +271,7 @@ The inventory service should authenticate the calling service by its client cert
 
 ## Future work
 
-Planned for `v0.6.2`:
+Done in `v0.6.2`:
 
 ```text
 - generate local development CA
