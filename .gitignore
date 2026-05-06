@@ -35,3 +35,7 @@ out/
 
 ### VS Code ###
 .vscode/
+
+# Local development mTLS certificates
+/certs/dev/*
+!/certs/dev/.gitkeep
