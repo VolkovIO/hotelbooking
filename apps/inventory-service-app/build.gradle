@@ -1,3 +1,4 @@
+// inventory-service-app
 plugins {
     id 'org.springframework.boot'
 }
