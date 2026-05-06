@@ -44,7 +44,9 @@ class JdbcBookingOutboxRepository implements BookingOutboxRepository {
                 status,
                 attempts,
                 next_attempt_at,
-                occurred_at
+                occurred_at,
+                correlation_id,
+                causation_id
             )
             values (
                 :id,
@@ -56,7 +58,9 @@ class JdbcBookingOutboxRepository implements BookingOutboxRepository {
                 :status,
                 0,
                 :nextAttemptAt,
-                :occurredAt
+                :occurredAt,
+                :correlationId,
+                :causationId
             )
             """)
         .param("id", message.id())
@@ -68,6 +72,8 @@ class JdbcBookingOutboxRepository implements BookingOutboxRepository {
         .param("status", BookingOutboxStatus.NEW.name())
         .param("nextAttemptAt", Timestamp.from(message.occurredAt()))
         .param("occurredAt", Timestamp.from(message.occurredAt()))
+        .param("correlationId", message.correlationId())
+        .param("causationId", message.causationId())
         .update();
   }
 
@@ -103,7 +109,9 @@ class JdbcBookingOutboxRepository implements BookingOutboxRepository {
                 outbox.event_version,
                 outbox.payload,
                 outbox.occurred_at,
-                outbox.attempts
+                outbox.attempts,
+                outbox.correlation_id,
+                outbox.causation_id
             """)
         .param("newStatus", BookingOutboxStatus.NEW.name())
         .param(PARAM_PROCESSING_STATUS, BookingOutboxStatus.PROCESSING.name())
@@ -120,7 +128,9 @@ class JdbcBookingOutboxRepository implements BookingOutboxRepository {
                     rs.getInt("event_version"),
                     deserializePayload(rs.getString("payload")),
                     rs.getTimestamp("occurred_at").toInstant(),
-                    rs.getInt("attempts")))
+                    rs.getInt("attempts"),
+                    UUID.fromString(rs.getString("correlation_id")),
+                    nullableUuid(rs.getString("causation_id"))))
         .list();
   }
 
@@ -212,5 +222,13 @@ class JdbcBookingOutboxRepository implements BookingOutboxRepository {
     } catch (JsonProcessingException exception) {
       throw new IllegalStateException("Failed to deserialize booking outbox payload", exception);
     }
+  }
+
+  private UUID nullableUuid(String value) {
+    if (value == null || value.isBlank()) {
+      return null;
+    }
+
+    return UUID.fromString(value);
   }
 }

@@ -13,7 +13,9 @@ public record BookingOutboxMessage(
     int eventVersion,
     Map<String, Object> payload,
     Instant occurredAt,
-    int attempts) {
+    int attempts,
+    UUID correlationId,
+    UUID causationId) {
 
   private static final String BOOKING_AGGREGATE_TYPE = "Booking";
 
@@ -24,6 +26,7 @@ public record BookingOutboxMessage(
     Objects.requireNonNull(eventType, "eventType must not be null");
     Objects.requireNonNull(payload, "payload must not be null");
     Objects.requireNonNull(occurredAt, "occurredAt must not be null");
+    Objects.requireNonNull(correlationId, "correlationId must not be null");
     payload = Map.copyOf(payload);
   }
 
@@ -36,6 +39,8 @@ public record BookingOutboxMessage(
         event.eventVersion(),
         event.payload(),
         event.occurredAt(),
-        0);
+        0,
+        event.correlationId(),
+        event.causationId());
   }
 }

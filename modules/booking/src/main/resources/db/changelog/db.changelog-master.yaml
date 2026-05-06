@@ -5,3 +5,5 @@ databaseChangeLog:
       file: db/changelog/changes/002-create-app-users-table.yaml
   - include:
       file: db/changelog/changes/003-create-booking-outbox-table.yaml
+  - include:
+      file: db/changelog/changes/004-add-outbox-correlation-metadata.yaml
