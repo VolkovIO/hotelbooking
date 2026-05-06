@@ -5,6 +5,9 @@ build/
 !**/src/main/**/build/
 !**/src/test/**/build/
 
+# keep shared run configs if needed
+.run/
+
 ### STS ###
 .apt_generated
 .classpath
