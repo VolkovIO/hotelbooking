@@ -23,7 +23,7 @@ The project is intentionally not production-ready yet.
 
 ---
 
-## Current stage: v0.6.1
+## Current stage: v0.6.2
 
 Starting from `v0.5.0`, the booking service supports:
 

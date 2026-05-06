@@ -12,6 +12,13 @@ spring:
         - security-dev
         - outbox-publisher
         - outbox-logging
+      local-jwt:
+        - booking-postgres
+        - inventory-grpc-client
+        - security-jwt
+        - outbox-publisher
+        - outbox-logging
+
   datasource:
     url: jdbc:postgresql://localhost:5432/hotelbooking
     username: hotelbooking
@@ -29,6 +36,11 @@ inventory:
     client:
       host: localhost
       port: 9090
+      tls:
+        enabled: ${INVENTORY_GRPC_CLIENT_TLS_ENABLED:true}
+        certificate-chain: ${INVENTORY_GRPC_CLIENT_CERTIFICATE_CHAIN:certs/dev/booking-service.crt}
+        private-key: ${INVENTORY_GRPC_CLIENT_PRIVATE_KEY:certs/dev/booking-service.key}
+        trust-cert-collection: ${INVENTORY_GRPC_TRUST_CERT_COLLECTION:certs/dev/ca.crt}
 
 app:
   booking:

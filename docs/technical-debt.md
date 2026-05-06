@@ -2,7 +2,7 @@
 
 ## Current version
 
-`v0.6.1`
+`v0.6.2`
 
 The project is a learning-oriented backend for hotel booking.
 
@@ -290,25 +290,23 @@ Event versioning should be preserved as consumers are introduced.
 
 ### Service-to-service security
 
-Booking-to-inventory gRPC communication is not yet protected by mTLS.
+Booking-to-inventory gRPC communication is protected by local development mTLS.
 
-Target model:
-
-```text
-external users -> Google JWT
-internal services -> mTLS
-```
-
-Inventory JWT is not the target model for service-to-service communication.
-
-Planned for `v0.6.2`:
-
+Implemented:
 ```text
 - inventory gRPC server TLS
 - client certificate requirement
 - booking gRPC client certificate
-- internal CA for local development
-- validation of booking-service identity from the client certificate
+- local development CA
+- booking-service client identity check
+```
+
+Remaining future work:
+```text
+- certificate rotation strategy
+- production certificate management
+- possible SPIFFE/SPIRE evaluation
+- service-level tests for rejected unauthenticated clients
 ```
 
 ---
