@@ -26,6 +26,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class BookingOutboxPollingServiceTest {
 
+  private static final int BATCH_SIZE = 10;
+  private static final int MAX_ATTEMPTS = 3;
+  private static final Duration RETRY_DELAY = Duration.ofSeconds(30);
   private static final String LOCKED_BY = "test-node";
 
   @Mock private BookingOutboxRepository repository;
@@ -38,10 +41,10 @@ class BookingOutboxPollingServiceTest {
   void shouldPublishClaimedMessagesAndMarkThemPublished() throws BookingOutboxPublicationException {
     BookingOutboxMessage message = message(0);
 
-    when(repository.claimBatchForProcessing(eq(10), any(), eq(LOCKED_BY)))
+    when(repository.claimBatchForProcessing(eq(BATCH_SIZE), any(), eq(LOCKED_BY)))
         .thenReturn(List.of(message));
 
-    service.publishAvailableMessages(10, 3, Duration.ofSeconds(30), LOCKED_BY);
+    service.publishAvailableMessages(BATCH_SIZE, MAX_ATTEMPTS, RETRY_DELAY, LOCKED_BY);
 
     verify(publisher).publish(message);
     verify(repository).markPublished(eq(message.id()), any());
@@ -51,14 +54,14 @@ class BookingOutboxPollingServiceTest {
   void shouldMarkMessageForRetryWhenPublishingFails() throws BookingOutboxPublicationException {
     BookingOutboxMessage message = message(0);
 
-    when(repository.claimBatchForProcessing(eq(10), any(), eq(LOCKED_BY)))
+    when(repository.claimBatchForProcessing(eq(BATCH_SIZE), any(), eq(LOCKED_BY)))
         .thenReturn(List.of(message));
 
     doThrow(new BookingOutboxPublicationException("temporary failure"))
         .when(publisher)
         .publish(message);
 
-    service.publishAvailableMessages(10, 3, Duration.ofSeconds(30), LOCKED_BY);
+    service.publishAvailableMessages(BATCH_SIZE, MAX_ATTEMPTS, RETRY_DELAY, LOCKED_BY);
 
     verify(repository).markRetryableFailure(eq(message.id()), any(), contains("temporary failure"));
     verify(repository, never()).markPublished(any(), any());
@@ -68,14 +71,14 @@ class BookingOutboxPollingServiceTest {
   void shouldMarkMessageAsFailedWhenMaxAttemptsReached() throws BookingOutboxPublicationException {
     BookingOutboxMessage message = message(2);
 
-    when(repository.claimBatchForProcessing(eq(10), any(), eq(LOCKED_BY)))
+    when(repository.claimBatchForProcessing(eq(BATCH_SIZE), any(), eq(LOCKED_BY)))
         .thenReturn(List.of(message));
 
     doThrow(new BookingOutboxPublicationException("permanent failure"))
         .when(publisher)
         .publish(message);
 
-    service.publishAvailableMessages(10, 3, Duration.ofSeconds(30), LOCKED_BY);
+    service.publishAvailableMessages(BATCH_SIZE, MAX_ATTEMPTS, RETRY_DELAY, LOCKED_BY);
 
     verify(repository).markTerminalFailure(eq(message.id()), contains("permanent failure"));
   }
@@ -89,6 +92,8 @@ class BookingOutboxPollingServiceTest {
         1,
         Map.of("bookingId", UUID.randomUUID().toString()),
         Instant.now(),
-        attempts);
+        attempts,
+        UUID.randomUUID(),
+        null);
   }
 }

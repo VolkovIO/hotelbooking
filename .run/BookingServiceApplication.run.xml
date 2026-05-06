@@ -1,0 +1,16 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="BookingServiceApplication" type="Application" factoryName="Application" nameIsGenerated="true">
+    <option name="MAIN_CLASS_NAME" value="com.example.hotelbooking.bookingservice.BookingServiceApplication" />
+    <module name="hotelbooking.apps.booking-service-app.main" />
+    <option name="PROGRAM_PARAMETERS" value="--spring.profiles.active=local-kafka --logging.level.com.example.hotelbooking=DEBUG" />
+    <extension name="coverage">
+      <pattern>
+        <option name="PATTERN" value="com.example.hotelbooking.bookingservice.*" />
+        <option name="ENABLED" value="true" />
+      </pattern>
+    </extension>
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

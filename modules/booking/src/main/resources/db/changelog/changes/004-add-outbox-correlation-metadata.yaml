@@ -1,0 +1,22 @@
+databaseChangeLog:
+  - changeSet:
+      id: 004-add-outbox-correlation-metadata
+      author: volkovself
+      changes:
+        - addColumn:
+            tableName: booking_outbox
+            columns:
+              - column:
+                  name: correlation_id
+                  type: uuid
+
+              - column:
+                  name: causation_id
+                  type: uuid
+
+        - createIndex:
+            tableName: booking_outbox
+            indexName: ix_booking_outbox_correlation_id
+            columns:
+              - column:
+                  name: correlation_id

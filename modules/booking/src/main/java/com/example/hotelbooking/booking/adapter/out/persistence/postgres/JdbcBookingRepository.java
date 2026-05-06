@@ -12,7 +12,6 @@ import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Profile;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -23,43 +22,8 @@ class JdbcBookingRepository implements BookingRepository {
 
   private final JdbcClient jdbcClient;
 
-  // Simple upsert implementation.
-  // In production, it's better to use native PostgreSQL "ON CONFLICT"
-  // or check for existence to avoid exception overhead.
   @Override
   public Booking save(Booking booking) {
-    try {
-      insert(booking);
-    } catch (DuplicateKeyException exception) {
-      update(booking);
-    }
-
-    return booking;
-  }
-
-  @Override
-  public Optional<Booking> findById(BookingId bookingId) {
-    return jdbcClient
-        .sql(
-            """
-            select id,
-                   user_id,
-                   hotel_id,
-                   room_type_id,
-                   check_in,
-                   check_out,
-                   guest_count,
-                   status,
-                   hold_id
-              from bookings
-             where id = :id
-            """)
-        .param("id", bookingId.value())
-        .query(this::mapRow)
-        .optional();
-  }
-
-  private void insert(Booking booking) {
     jdbcClient
         .sql(
             """
@@ -85,6 +49,16 @@ class JdbcBookingRepository implements BookingRepository {
                 :status,
                 :holdId
             )
+            on conflict (id) do update
+               set user_id = excluded.user_id,
+                   hotel_id = excluded.hotel_id,
+                   room_type_id = excluded.room_type_id,
+                   check_in = excluded.check_in,
+                   check_out = excluded.check_out,
+                   guest_count = excluded.guest_count,
+                   status = excluded.status,
+                   hold_id = excluded.hold_id,
+                   updated_at = CURRENT_TIMESTAMP
             """)
         .param("id", booking.getId().value())
         .param("userId", booking.getUserId().value())
@@ -96,34 +70,30 @@ class JdbcBookingRepository implements BookingRepository {
         .param("status", booking.getStatus().name())
         .param("holdId", booking.getHoldId())
         .update();
+
+    return booking;
   }
 
-  private void update(Booking booking) {
-    jdbcClient
+  @Override
+  public Optional<Booking> findById(BookingId bookingId) {
+    return jdbcClient
         .sql(
             """
-            update bookings
-               set user_id = :userId,
-                   hotel_id = :hotelId,
-                   room_type_id = :roomTypeId,
-                   check_in = :checkIn,
-                   check_out = :checkOut,
-                   guest_count = :guestCount,
-                   status = :status,
-                   hold_id = :holdId,
-                   updated_at = CURRENT_TIMESTAMP
+            select id,
+                   user_id,
+                   hotel_id,
+                   room_type_id,
+                   check_in,
+                   check_out,
+                   guest_count,
+                   status,
+                   hold_id
+              from bookings
              where id = :id
             """)
-        .param("id", booking.getId().value())
-        .param("userId", booking.getUserId().value())
-        .param("hotelId", booking.getHotelId())
-        .param("roomTypeId", booking.getRoomTypeId())
-        .param("checkIn", booking.getStayPeriod().checkIn())
-        .param("checkOut", booking.getStayPeriod().checkOut())
-        .param("guestCount", booking.getGuestCount())
-        .param("status", booking.getStatus().name())
-        .param("holdId", booking.getHoldId())
-        .update();
+        .param("id", bookingId.value())
+        .query(this::mapRow)
+        .optional();
   }
 
   @SuppressWarnings("unused")
