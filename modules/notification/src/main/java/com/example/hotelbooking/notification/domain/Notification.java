@@ -5,12 +5,19 @@ import java.time.Instant;
 import java.util.Objects;
 import lombok.Getter;
 
+/**
+ * Notification is a delivery task created from an external domain event.
+ *
+ * <p>The aggregate protects delivery lifecycle invariants. Provider-specific sending is handled
+ * outside of the domain through sender ports.
+ */
 @Getter
+@SuppressWarnings({"PMD.CyclomaticComplexity", "PMD.NullAssignment"})
 public final class Notification {
 
   private final NotificationId id;
   private final SourceEventId sourceEventId;
-  private final String sourceEventType;
+  private final SourceEventType sourceEventType;
   private final NotificationType type;
   private final NotificationUserId userId;
   private final NotificationChannel channel;
@@ -28,7 +35,7 @@ public final class Notification {
   private Notification(
       NotificationId id,
       SourceEventId sourceEventId,
-      String sourceEventType,
+      SourceEventType sourceEventType,
       NotificationType type,
       NotificationUserId userId,
       NotificationChannel channel,
@@ -44,7 +51,8 @@ public final class Notification {
       Instant updatedAt) {
     this.id = Objects.requireNonNull(id, "id must not be null");
     this.sourceEventId = Objects.requireNonNull(sourceEventId, "sourceEventId must not be null");
-    this.sourceEventType = requireText(sourceEventType, "sourceEventType");
+    this.sourceEventType =
+        Objects.requireNonNull(sourceEventType, "sourceEventType must not be null");
     this.type = Objects.requireNonNull(type, "type must not be null");
     this.userId = Objects.requireNonNull(userId, "userId must not be null");
     this.channel = Objects.requireNonNull(channel, "channel must not be null");
@@ -53,16 +61,18 @@ public final class Notification {
     this.body = Objects.requireNonNull(body, "body must not be null");
     this.status = Objects.requireNonNull(status, "status must not be null");
     this.attempts = Objects.requireNonNull(attempts, "attempts must not be null");
-    this.nextAttemptAt = Objects.requireNonNull(nextAttemptAt, "nextAttemptAt must not be null");
+    this.nextAttemptAt = nextAttemptAt;
     this.lastError = lastError;
     this.createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
     this.sentAt = sentAt;
     this.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt must not be null");
+
+    validateState();
   }
 
   public static Notification pending(
       SourceEventId sourceEventId,
-      String sourceEventType,
+      SourceEventType sourceEventType,
       NotificationType type,
       NotificationUserId userId,
       NotificationChannel channel,
@@ -92,7 +102,7 @@ public final class Notification {
 
   public static Notification skipped(
       SourceEventId sourceEventId,
-      String sourceEventType,
+      SourceEventType sourceEventType,
       NotificationType type,
       NotificationUserId userId,
       NotificationSubject subject,
@@ -112,7 +122,7 @@ public final class Notification {
         body,
         NotificationStatus.SKIPPED,
         NotificationAttemptCount.zero(),
-        now,
+        null,
         new NotificationErrorMessage(reason),
         now,
         null,
@@ -122,7 +132,7 @@ public final class Notification {
   public static Notification restore(
       NotificationId id,
       SourceEventId sourceEventId,
-      String sourceEventType,
+      SourceEventType sourceEventType,
       NotificationType type,
       NotificationUserId userId,
       NotificationChannel channel,
@@ -155,27 +165,44 @@ public final class Notification {
         updatedAt);
   }
 
-  @SuppressWarnings("PMD.NullAssignment")
   public void markSent() {
+    requirePending("mark as sent");
+
     this.status = NotificationStatus.SENT;
     this.sentAt = Instant.now();
+    this.nextAttemptAt = null;
     this.lastError = null;
     this.updatedAt = Instant.now();
+
+    validateState();
   }
 
   public void markRetryableFailure(String errorMessage, Duration retryDelay) {
+    requirePending("schedule retry");
+
+    if (retryDelay == null || retryDelay.isNegative() || retryDelay.isZero()) {
+      throw new NotificationDomainException("retry delay must be positive");
+    }
+
     this.status = NotificationStatus.PENDING;
     this.attempts = attempts.increment();
     this.nextAttemptAt = Instant.now().plus(retryDelay);
     this.lastError = new NotificationErrorMessage(errorMessage);
     this.updatedAt = Instant.now();
+
+    validateState();
   }
 
   public void markFailed(String errorMessage) {
+    requirePending("mark as failed");
+
     this.status = NotificationStatus.FAILED;
     this.attempts = attempts.increment();
+    this.nextAttemptAt = null;
     this.lastError = new NotificationErrorMessage(errorMessage);
     this.updatedAt = Instant.now();
+
+    validateState();
   }
 
   public boolean isPending() {
@@ -183,14 +210,43 @@ public final class Notification {
   }
 
   public boolean reachedMaxAttempts(int maxAttempts) {
+    if (maxAttempts <= 0) {
+      throw new NotificationDomainException("max attempts must be positive");
+    }
+
     return attempts.value() + 1 >= maxAttempts;
   }
 
-  private static String requireText(String value, String fieldName) {
-    if (value == null || value.isBlank()) {
-      throw new IllegalArgumentException(fieldName + " must not be blank");
+  private void requirePending(String operation) {
+    if (status != NotificationStatus.PENDING) {
+      throw new NotificationDomainException(
+          "Cannot " + operation + " notification with status " + status);
+    }
+  }
+
+  private void validateState() {
+    if (status == NotificationStatus.PENDING && nextAttemptAt == null) {
+      throw new NotificationDomainException("pending notification must have nextAttemptAt");
     }
 
-    return value;
+    if (status == NotificationStatus.SENT && sentAt == null) {
+      throw new NotificationDomainException("sent notification must have sentAt");
+    }
+
+    if (status != NotificationStatus.SENT && sentAt != null) {
+      throw new NotificationDomainException("only sent notification can have sentAt");
+    }
+
+    if ((status == NotificationStatus.FAILED || status == NotificationStatus.SKIPPED)
+        && lastError == null) {
+      throw new NotificationDomainException(status + " notification must have error message");
+    }
+
+    if ((status == NotificationStatus.SENT
+            || status == NotificationStatus.FAILED
+            || status == NotificationStatus.SKIPPED)
+        && nextAttemptAt != null) {
+      throw new NotificationDomainException(status + " notification must not have nextAttemptAt");
+    }
   }
 }

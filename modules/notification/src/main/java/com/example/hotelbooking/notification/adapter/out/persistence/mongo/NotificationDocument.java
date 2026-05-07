@@ -12,6 +12,7 @@ import com.example.hotelbooking.notification.domain.NotificationSubject;
 import com.example.hotelbooking.notification.domain.NotificationType;
 import com.example.hotelbooking.notification.domain.NotificationUserId;
 import com.example.hotelbooking.notification.domain.SourceEventId;
+import com.example.hotelbooking.notification.domain.SourceEventType;
 import java.time.Instant;
 import java.util.UUID;
 import lombok.AllArgsConstructor;
@@ -58,7 +59,7 @@ class NotificationDocument {
     return new NotificationDocument(
         notification.getId().value().toString(),
         notification.getSourceEventId().value().toString(),
-        notification.getSourceEventType(),
+        notification.getSourceEventType().value(),
         notification.getType().name(),
         notification.getUserId().value().toString(),
         notification.getChannel().name(),
@@ -78,7 +79,7 @@ class NotificationDocument {
     return Notification.restore(
         new NotificationId(UUID.fromString(id)),
         new SourceEventId(UUID.fromString(sourceEventId)),
-        sourceEventType,
+        new SourceEventType(sourceEventType),
         NotificationType.valueOf(type),
         new NotificationUserId(UUID.fromString(userId)),
         NotificationChannel.valueOf(channel),
