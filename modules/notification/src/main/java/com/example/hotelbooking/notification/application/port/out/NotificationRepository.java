@@ -16,5 +16,5 @@ public interface NotificationRepository {
   List<Notification> claimPendingForDelivery(
       String lockedBy, Instant now, Instant lockedUntil, int limit);
 
-  List<Notification> findByUserId(NotificationUserId userId);
+  List<Notification> findByUserId(NotificationUserId userId, int limit);
 }

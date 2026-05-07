@@ -96,8 +96,13 @@ class MongoNotificationRepository implements NotificationRepository {
   }
 
   @Override
-  public List<Notification> findByUserId(NotificationUserId userId) {
-    return springDataRepository.findByUserIdOrderByCreatedAtDesc(userId.value().toString()).stream()
+  public List<Notification> findByUserId(NotificationUserId userId, int limit) {
+    Query query =
+        Query.query(Criteria.where("userId").is(userId.value().toString()))
+            .with(Sort.by(Sort.Direction.DESC, FIELD_CREATED_AT))
+            .limit(limit);
+
+    return mongoTemplate.find(query, NotificationDocument.class).stream()
         .map(NotificationDocument::toDomain)
         .toList();
   }
