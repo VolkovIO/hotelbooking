@@ -1,5 +1,6 @@
 package com.example.hotelbooking.notification.adapter.out.persistence.mongo;
 
+import com.example.hotelbooking.notification.application.exception.NotificationClaimLostException;
 import com.example.hotelbooking.notification.application.port.out.NotificationRepository;
 import com.example.hotelbooking.notification.domain.Notification;
 import com.example.hotelbooking.notification.domain.NotificationStatus;
@@ -7,7 +8,6 @@ import com.example.hotelbooking.notification.domain.NotificationUserId;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DuplicateKeyException;
@@ -24,6 +24,7 @@ import org.springframework.stereotype.Repository;
 @RequiredArgsConstructor
 class MongoNotificationRepository implements NotificationRepository {
 
+  private static final String FIELD_ID = "_id";
   private static final String FIELD_STATUS = "status";
   private static final String FIELD_NEXT_ATTEMPT_AT = "nextAttemptAt";
   private static final String FIELD_CREATED_AT = "createdAt";
@@ -50,9 +51,34 @@ class MongoNotificationRepository implements NotificationRepository {
   }
 
   @Override
+  public Notification saveClaimed(Notification notification, String lockedBy) {
+    MongoNotificationClaimValidator.validateLockedBy(lockedBy);
+
+    Query query =
+        Query.query(
+            Criteria.where(FIELD_ID)
+                .is(notification.getId().value().toString())
+                .and(FIELD_LOCKED_BY)
+                .is(lockedBy));
+
+    NotificationDocument document =
+        mongoTemplate.findAndModify(
+            query,
+            updateFrom(notification),
+            FindAndModifyOptions.options().returnNew(true),
+            NotificationDocument.class);
+
+    if (document == null) {
+      throw new NotificationClaimLostException(notification.getId());
+    }
+
+    return document.toDomain();
+  }
+
+  @Override
   public List<Notification> claimPendingForDelivery(
       String lockedBy, Instant now, Instant lockedUntil, int limit) {
-    validateClaimArguments(lockedBy, now, lockedUntil, limit);
+    MongoNotificationClaimValidator.validateClaimArguments(lockedBy, now, lockedUntil, limit);
 
     List<Notification> claimedNotifications = new ArrayList<>();
 
@@ -96,28 +122,40 @@ class MongoNotificationRepository implements NotificationRepository {
         query, update, FindAndModifyOptions.options().returnNew(true), NotificationDocument.class);
   }
 
+  private Update updateFrom(Notification notification) {
+    return new Update()
+        .set("sourceEventId", notification.getSourceEventId().value().toString())
+        .set("sourceEventType", notification.getSourceEventType().value())
+        .set("type", notification.getType().name())
+        .set("userId", notification.getUserId().value().toString())
+        .set("channel", notification.getChannel().name())
+        .set("destination", notification.getDestination().value())
+        .set("subject", notification.getSubject().value())
+        .set("body", notification.getBody().value())
+        .set(FIELD_STATUS, notification.getStatus().name())
+        .set("attempts", notification.getAttempts().value())
+        .set(FIELD_NEXT_ATTEMPT_AT, notification.getNextAttemptAt())
+        .set("lastError", lastErrorValue(notification))
+        .set(FIELD_CREATED_AT, notification.getCreatedAt())
+        .set("sentAt", notification.getSentAt())
+        .set(FIELD_UPDATED_AT, notification.getUpdatedAt())
+        .unset(FIELD_LOCKED_BY)
+        .unset(FIELD_LOCKED_UNTIL);
+  }
+
   private Criteria lockAvailableCriteria(Instant now) {
     return new Criteria()
         .orOperator(
             Criteria.where(FIELD_LOCKED_UNTIL).exists(false),
+            Criteria.where(FIELD_LOCKED_UNTIL).is(null),
             Criteria.where(FIELD_LOCKED_UNTIL).lte(now));
   }
 
-  private void validateClaimArguments(
-      String lockedBy, Instant now, Instant lockedUntil, int limit) {
-    if (lockedBy == null || lockedBy.isBlank()) {
-      throw new IllegalArgumentException("lockedBy must not be blank");
+  private static String lastErrorValue(Notification notification) {
+    if (notification.getLastError() == null) {
+      return null;
     }
 
-    Objects.requireNonNull(now, "now must not be null");
-    Objects.requireNonNull(lockedUntil, "lockedUntil must not be null");
-
-    if (!lockedUntil.isAfter(now)) {
-      throw new IllegalArgumentException("lockedUntil must be after now");
-    }
-
-    if (limit <= 0) {
-      throw new IllegalArgumentException("limit must be positive");
-    }
+    return notification.getLastError().value();
   }
 }
