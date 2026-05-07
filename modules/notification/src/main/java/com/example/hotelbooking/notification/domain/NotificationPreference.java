@@ -30,9 +30,13 @@ public class NotificationPreference {
   }
 
   public static NotificationPreference create(
-      NotificationUserId userId, NotificationChannel channel, NotificationDestination destination) {
+      NotificationUserId userId,
+      NotificationChannel channel,
+      NotificationDestination destination,
+      boolean enabled) {
     Instant now = Instant.now();
-    return new NotificationPreference(userId, channel, destination, true, now, now);
+
+    return new NotificationPreference(userId, channel, destination, enabled, now, now);
   }
 
   public static NotificationPreference restore(
