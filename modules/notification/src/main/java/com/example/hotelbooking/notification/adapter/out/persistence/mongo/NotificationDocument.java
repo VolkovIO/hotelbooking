@@ -35,6 +35,9 @@ import org.springframework.data.mongodb.core.mapping.Document;
 @CompoundIndex(
     name = "ix_notifications_status_next_attempt",
     def = "{'status': 1, 'nextAttemptAt': 1}")
+@CompoundIndex(
+    name = "ix_notifications_delivery_claim",
+    def = "{'status': 1, 'nextAttemptAt': 1, 'lockedUntil': 1}")
 class NotificationDocument {
 
   @Id private String id;
@@ -54,6 +57,8 @@ class NotificationDocument {
   private Instant createdAt;
   private Instant sentAt;
   private Instant updatedAt;
+  private String lockedBy;
+  private Instant lockedUntil;
 
   static NotificationDocument from(Notification notification) {
     return new NotificationDocument(
@@ -72,7 +77,9 @@ class NotificationDocument {
         lastErrorValue(notification),
         notification.getCreatedAt(),
         notification.getSentAt(),
-        notification.getUpdatedAt());
+        notification.getUpdatedAt(),
+        null,
+        null);
   }
 
   Notification toDomain() {
