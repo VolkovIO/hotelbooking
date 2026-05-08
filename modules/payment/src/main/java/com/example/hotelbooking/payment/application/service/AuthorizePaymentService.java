@@ -12,9 +12,9 @@ import com.example.hotelbooking.payment.domain.PaymentAmount;
 import com.example.hotelbooking.payment.domain.PaymentCurrency;
 import com.example.hotelbooking.payment.domain.PaymentProvider;
 import com.example.hotelbooking.payment.domain.PaymentUserId;
+import com.example.hotelbooking.payment.domain.event.PaymentLifecycleEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -22,13 +22,13 @@ public class AuthorizePaymentService {
 
   private final PaymentRepository paymentRepository;
   private final PaymentProviderGatewayRegistry gatewayRegistry;
+  private final PaymentStateChangePersistenceService persistenceService;
 
-  @Transactional
   public Payment authorize(AuthorizePaymentCommand command) {
     BookingId bookingId = new BookingId(command.bookingId());
 
     return paymentRepository
-        .findByBookingId(bookingId) // Simple idempotency
+        .findByBookingId(bookingId)
         .orElseGet(() -> authorizeNewPayment(command, bookingId));
   }
 
@@ -52,10 +52,12 @@ public class AuthorizePaymentService {
 
     if (result.authorized()) {
       payment.markAuthorized(result.providerPaymentId());
-    } else {
-      payment.markDeclined(result.failureReason());
+
+      return persistenceService.save(payment, PaymentLifecycleEvent.authorized(payment));
     }
 
-    return paymentRepository.save(payment);
+    payment.markDeclined(result.failureReason());
+
+    return persistenceService.save(payment, PaymentLifecycleEvent.declined(payment));
   }
 }

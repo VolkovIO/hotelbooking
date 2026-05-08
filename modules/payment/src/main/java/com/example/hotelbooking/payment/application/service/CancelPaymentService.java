@@ -7,9 +7,9 @@ import com.example.hotelbooking.payment.application.provider.PaymentProviderGate
 import com.example.hotelbooking.payment.application.provider.PaymentProviderGatewayRegistry;
 import com.example.hotelbooking.payment.domain.Payment;
 import com.example.hotelbooking.payment.domain.PaymentId;
+import com.example.hotelbooking.payment.domain.event.PaymentLifecycleEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -17,8 +17,8 @@ public class CancelPaymentService {
 
   private final PaymentRepository paymentRepository;
   private final PaymentProviderGatewayRegistry gatewayRegistry;
+  private final PaymentStateChangePersistenceService persistenceService;
 
-  @Transactional
   public Payment cancel(CancelPaymentCommand command) {
     PaymentId paymentId = new PaymentId(command.paymentId());
     Payment payment =
@@ -26,11 +26,11 @@ public class CancelPaymentService {
             .findById(paymentId)
             .orElseThrow(() -> new PaymentNotFoundException(paymentId));
 
+    payment.markCancelled();
+
     PaymentProviderGateway gateway = gatewayRegistry.getGateway(payment.getProvider());
     gateway.cancel(payment.getProviderPaymentId());
 
-    payment.markCancelled();
-
-    return paymentRepository.save(payment);
+    return persistenceService.save(payment, PaymentLifecycleEvent.cancelled(payment));
   }
 }

@@ -1,0 +1,108 @@
+databaseChangeLog:
+  - changeSet:
+      id: 002-create-payment-outbox-table
+      author: volkovself
+      changes:
+        - createTable:
+            tableName: payment_outbox
+            columns:
+              - column:
+                  name: event_id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: event_type
+                  type: varchar(128)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: event_version
+                  type: int
+                  constraints:
+                    nullable: false
+              - column:
+                  name: aggregate_type
+                  type: varchar(128)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: aggregate_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: payload
+                  type: jsonb
+                  constraints:
+                    nullable: false
+              - column:
+                  name: occurred_at
+                  type: timestamp with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: correlation_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: causation_id
+                  type: uuid
+              - column:
+                  name: processing_status
+                  type: varchar(32)
+                  defaultValue: NEW
+                  constraints:
+                    nullable: false
+              - column:
+                  name: retry_count
+                  type: int
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+              - column:
+                  name: next_attempt_at
+                  type: timestamp with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: last_error
+                  type: varchar(1000)
+              - column:
+                  name: created_at
+                  type: timestamp with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: published_at
+                  type: timestamp with time zone
+              - column:
+                  name: updated_at
+                  type: timestamp with time zone
+                  constraints:
+                    nullable: false
+
+        - createIndex:
+            tableName: payment_outbox
+            indexName: ix_payment_outbox_processing_status_next_attempt_at
+            columns:
+              - column:
+                  name: processing_status
+              - column:
+                  name: next_attempt_at
+
+        - createIndex:
+            tableName: payment_outbox
+            indexName: ix_payment_outbox_aggregate_id
+            columns:
+              - column:
+                  name: aggregate_id
+
+        - createIndex:
+            tableName: payment_outbox
+            indexName: ix_payment_outbox_correlation_id
+            columns:
+              - column:
+                  name: correlation_id

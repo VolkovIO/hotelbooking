@@ -22,6 +22,7 @@ import com.example.hotelbooking.payment.domain.PaymentProvider;
 import com.example.hotelbooking.payment.domain.PaymentProviderPaymentId;
 import com.example.hotelbooking.payment.domain.PaymentStatus;
 import com.example.hotelbooking.payment.domain.PaymentUserId;
+import com.example.hotelbooking.payment.domain.event.PaymentLifecycleEvent;
 import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.UUID;
@@ -49,6 +50,8 @@ class AuthorizePaymentServiceTest {
 
   @Mock private PaymentProviderGateway gateway;
 
+  @Mock private PaymentStateChangePersistenceService persistenceService;
+
   @Test
   void shouldAuthorizeNewPayment() {
     AuthorizePaymentService service = newService();
@@ -58,7 +61,7 @@ class AuthorizePaymentServiceTest {
     when(gatewayRegistry.getGateway(PaymentProvider.FAKE)).thenReturn(gateway);
     when(gateway.authorize(any(PaymentProviderAuthorizationRequest.class)))
         .thenReturn(PaymentProviderAuthorizationResult.authorized(PROVIDER_PAYMENT_ID));
-    when(paymentRepository.save(any(Payment.class)))
+    when(persistenceService.save(any(Payment.class), any(PaymentLifecycleEvent.class)))
         .thenAnswer(invocation -> invocation.getArgument(0));
 
     Payment result = service.authorize(command);
@@ -67,7 +70,7 @@ class AuthorizePaymentServiceTest {
     assertEquals(PROVIDER_PAYMENT_ID, result.getProviderPaymentId());
 
     ArgumentCaptor<Payment> paymentCaptor = ArgumentCaptor.forClass(Payment.class);
-    verify(paymentRepository).save(paymentCaptor.capture());
+    verify(persistenceService).save(paymentCaptor.capture(), any(PaymentLifecycleEvent.class));
     assertEquals(PaymentStatus.AUTHORIZED, paymentCaptor.getValue().getStatus());
   }
 
@@ -80,7 +83,7 @@ class AuthorizePaymentServiceTest {
     when(gatewayRegistry.getGateway(PaymentProvider.FAKE)).thenReturn(gateway);
     when(gateway.authorize(any(PaymentProviderAuthorizationRequest.class)))
         .thenReturn(PaymentProviderAuthorizationResult.declined(FAILURE_REASON));
-    when(paymentRepository.save(any(Payment.class)))
+    when(persistenceService.save(any(Payment.class), any(PaymentLifecycleEvent.class)))
         .thenAnswer(invocation -> invocation.getArgument(0));
 
     Payment result = service.authorize(command);
@@ -101,11 +104,11 @@ class AuthorizePaymentServiceTest {
 
     assertSame(existingPayment, result);
     verify(gatewayRegistry, never()).getGateway(PaymentProvider.FAKE);
-    verify(paymentRepository, never()).save(any(Payment.class));
+    verify(persistenceService, never()).save(any(Payment.class), any(PaymentLifecycleEvent.class));
   }
 
   private AuthorizePaymentService newService() {
-    return new AuthorizePaymentService(paymentRepository, gatewayRegistry);
+    return new AuthorizePaymentService(paymentRepository, gatewayRegistry, persistenceService);
   }
 
   private AuthorizePaymentCommand command() {

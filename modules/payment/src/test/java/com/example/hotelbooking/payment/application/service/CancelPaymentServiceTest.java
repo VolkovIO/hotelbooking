@@ -2,6 +2,9 @@ package com.example.hotelbooking.payment.application.service;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.same;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -19,6 +22,7 @@ import com.example.hotelbooking.payment.domain.PaymentProvider;
 import com.example.hotelbooking.payment.domain.PaymentProviderPaymentId;
 import com.example.hotelbooking.payment.domain.PaymentStatus;
 import com.example.hotelbooking.payment.domain.PaymentUserId;
+import com.example.hotelbooking.payment.domain.event.PaymentLifecycleEvent;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
@@ -41,6 +45,8 @@ class CancelPaymentServiceTest {
 
   @Mock private PaymentProviderGateway gateway;
 
+  @Mock private PaymentStateChangePersistenceService persistenceService;
+
   @Test
   void shouldCancelAuthorizedPayment() {
     CancelPaymentService service = newService();
@@ -48,13 +54,14 @@ class CancelPaymentServiceTest {
 
     when(paymentRepository.findById(new PaymentId(PAYMENT_ID))).thenReturn(Optional.of(payment));
     when(gatewayRegistry.getGateway(PaymentProvider.FAKE)).thenReturn(gateway);
-    when(paymentRepository.save(payment)).thenReturn(payment);
+    when(persistenceService.save(any(Payment.class), any(PaymentLifecycleEvent.class)))
+        .thenAnswer(invocation -> invocation.getArgument(0));
 
     Payment result = service.cancel(new CancelPaymentCommand(PAYMENT_ID));
 
     assertEquals(PaymentStatus.CANCELLED, result.getStatus());
     verify(gateway).cancel(PROVIDER_PAYMENT_ID);
-    verify(paymentRepository).save(payment);
+    verify(persistenceService).save(same(payment), any(PaymentLifecycleEvent.class));
   }
 
   @Test
@@ -65,10 +72,11 @@ class CancelPaymentServiceTest {
 
     assertThrows(
         PaymentNotFoundException.class, () -> service.cancel(new CancelPaymentCommand(PAYMENT_ID)));
+    verify(persistenceService, never()).save(any(Payment.class), any(PaymentLifecycleEvent.class));
   }
 
   private CancelPaymentService newService() {
-    return new CancelPaymentService(paymentRepository, gatewayRegistry);
+    return new CancelPaymentService(paymentRepository, gatewayRegistry, persistenceService);
   }
 
   private Payment authorizedPayment() {

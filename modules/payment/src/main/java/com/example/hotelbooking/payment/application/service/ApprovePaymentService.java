@@ -7,9 +7,9 @@ import com.example.hotelbooking.payment.application.provider.PaymentProviderGate
 import com.example.hotelbooking.payment.application.provider.PaymentProviderGatewayRegistry;
 import com.example.hotelbooking.payment.domain.Payment;
 import com.example.hotelbooking.payment.domain.PaymentId;
+import com.example.hotelbooking.payment.domain.event.PaymentLifecycleEvent;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -17,8 +17,8 @@ public class ApprovePaymentService {
 
   private final PaymentRepository paymentRepository;
   private final PaymentProviderGatewayRegistry gatewayRegistry;
+  private final PaymentStateChangePersistenceService persistenceService;
 
-  @Transactional
   public Payment approve(ApprovePaymentCommand command) {
     PaymentId paymentId = new PaymentId(command.paymentId());
     Payment payment =
@@ -26,11 +26,11 @@ public class ApprovePaymentService {
             .findById(paymentId)
             .orElseThrow(() -> new PaymentNotFoundException(paymentId));
 
+    payment.markApproved();
+
     PaymentProviderGateway gateway = gatewayRegistry.getGateway(payment.getProvider());
     gateway.approve(payment.getProviderPaymentId());
 
-    payment.markApproved();
-
-    return paymentRepository.save(payment);
+    return persistenceService.save(payment, PaymentLifecycleEvent.approved(payment));
   }
 }
