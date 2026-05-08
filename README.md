@@ -12,6 +12,8 @@ Main topics:
 - Spring Boot applications
 - PostgreSQL
 - MongoDB
+- JPA/Hibernate
+- Liquibase
 - transactional outbox
 - Kafka
 - gRPC
@@ -19,11 +21,12 @@ Main topics:
 - service-to-service communication
 - event-driven architecture
 - notification delivery flow
+- payment lifecycle modeling
 - production-like technical debt tracking
 
 ## Current version
 
-Current project version: `0.8.0`
+Current project version: `0.9.0`
 
 Implemented milestones:
 
@@ -33,6 +36,7 @@ Implemented milestones:
 - `v0.6.2` inventory gRPC mTLS
 - `v0.7.0` Kafka booking event publication
 - `v0.8.0` notification service foundation
+- `v0.9.0` payment service foundation
 
 ## Project structure
 
@@ -44,6 +48,7 @@ Applications:
 apps/booking-service-app
 apps/inventory-service-app
 apps/notification-service-app
+apps/payment-service-app
 ```
 
 Business modules:
@@ -53,6 +58,7 @@ modules/booking
 modules/inventory
 modules/inventory-grpc-api
 modules/notification
+modules/payment
 ```
 
 ## Services
@@ -72,7 +78,7 @@ Main responsibilities:
 
 Storage:
 
-- PostgreSQL
+- PostgreSQL database `hotelbooking`
 
 Important integration points:
 
@@ -92,7 +98,7 @@ Main responsibilities:
 
 Storage:
 
-- MongoDB
+- MongoDB database used by Inventory Service
 
 Public catalog endpoints are accessible without user authentication.
 
@@ -122,6 +128,31 @@ Storage:
 
 Notification Service does not call real external providers yet. EMAIL, TELEGRAM and MAX senders currently write to logs only.
 
+### Payment Service
+
+Payment Service owns payment state.
+
+Current capabilities:
+
+- manages payment lifecycle
+- uses JPA/Hibernate persistence
+- uses Liquibase-managed PostgreSQL schema
+- exposes payment API
+- exposes Swagger UI for local testing
+- uses a fake payment provider
+- persists payment lifecycle events into a transactional outbox
+- publishes payment events to Kafka
+
+Storage:
+
+- PostgreSQL database `hotelbooking_payment`
+
+Important integration points:
+
+- Kafka producer for `payment.events`
+
+Payment Service is not yet orchestrated by Booking Service. Full booking-payment workflow coordination is planned for a later saga/process-manager milestone.
+
 ## Infrastructure
 
 Local infrastructure is started through Docker Compose.
@@ -137,6 +168,29 @@ Start infrastructure:
 ```bash
 docker compose up -d
 ```
+
+## Local database layout
+
+For local development, some services share infrastructure containers while still owning separate logical databases.
+
+PostgreSQL:
+
+```text
+container: hotelbooking-postgres
+
+logical databases:
+- hotelbooking
+- hotelbooking_payment
+```
+
+MongoDB:
+
+```text
+one local MongoDB instance
+separate logical databases for inventory and notification contexts
+```
+
+This setup keeps local development simpler while preserving service-level database ownership at the logical database level.
 
 ## Local profiles
 
@@ -196,11 +250,57 @@ Run Notification Service locally:
 gradlew.bat :apps:notification-service-app:bootRun --args="--spring.profiles.active=local"
 ```
 
+### Payment Service
+
+Typical local profile without Kafka publisher:
+
+```text
+local
+```
+
+Kafka-enabled local profile:
+
+```text
+local-kafka
+```
+
+Expected profile groups:
+
+```text
+local:
+- payment-postgres
+- payment-dev
+
+local-kafka:
+- payment-postgres
+- payment-dev
+- payment-outbox-publisher
+- payment-outbox-kafka
+```
+
+Run Payment Service locally without Kafka publisher:
+
+```bash
+gradlew.bat :apps:payment-service-app:bootRun --args="--spring.profiles.active=local"
+```
+
+Run Payment Service locally with Kafka publisher:
+
+```bash
+gradlew.bat :apps:payment-service-app:bootRun --args="--spring.profiles.active=local-kafka"
+```
+
+Swagger UI:
+
+```text
+http://localhost:8083/swagger-ui.html
+```
+
 ## Kafka
 
 Booking Service publishes booking lifecycle events to Kafka.
 
-Current topic:
+Current booking topic:
 
 ```text
 booking.events
@@ -208,15 +308,23 @@ booking.events
 
 Notification Service consumes this topic.
 
-Current consumer group:
+Current notification consumer group:
 
 ```text
 notification-service
 ```
 
-Kafka event publication is based on the Booking Service transactional outbox.
+Payment Service publishes payment lifecycle events to Kafka.
 
-## Notification local verification
+Current payment topic:
+
+```text
+payment.events
+```
+
+Kafka event publication is based on transactional outbox tables in the producing services.
+
+## Payment local verification
 
 Start infrastructure:
 
@@ -224,60 +332,76 @@ Start infrastructure:
 docker compose up -d
 ```
 
-Run Inventory Service.
-
-Run Booking Service with Kafka profile.
-
-Run Notification Service:
+Create payment database if it does not exist yet:
 
 ```bash
-gradlew.bat :apps:notification-service-app:bootRun --args="--spring.profiles.active=local"
+docker exec -it hotelbooking-postgres psql -U hotelbooking -d hotelbooking
 ```
 
-Create or update notification preference:
+Inside `psql`:
+
+```sql
+create database hotelbooking_payment;
+```
+
+Run Payment Service with Kafka publisher:
 
 ```bash
-curl -X PUT "http://localhost:8082/api/v1/notification-preferences/2e1ecd64-e449-49a0-8744-eb5473c8e76b" ^
-  -H "Content-Type: application/json" ^
-  -d "{\"channel\":\"EMAIL\",\"destination\":\"user@example.com\",\"enabled\":true}"
+gradlew.bat :apps:payment-service-app:bootRun --args="--spring.profiles.active=local-kafka"
 ```
 
-Create a booking and confirm it.
+Open Swagger UI:
 
-Expected behavior:
-
-- `BookingPlacedOnHold` event is ignored by Notification Service.
-- `BookingConfirmed` event creates a notification.
-- Delivery scheduler claims the notification.
-- Logging EMAIL sender writes a log message.
-- Notification status becomes `SENT`.
-
-Get notification history:
-
-```bash
-curl "http://localhost:8082/api/v1/notifications?userId=2e1ecd64-e449-49a0-8744-eb5473c8e76b&limit=10"
+```text
+http://localhost:8083/swagger-ui.html
 ```
 
-## Build and checks
+Authorize payment:
 
-Run full check:
-
-```bash
-gradlew.bat check
+```http
+POST /api/v1/payments/authorize
 ```
 
-For faster checks during development, prefer module-level commands.
+Approve payment:
 
-Examples:
-
-```bash
-gradlew.bat :modules:notification:check
-gradlew.bat :modules:notification:pmdMain
-gradlew.bat :modules:notification:pmdTest
-gradlew.bat :apps:notification-service-app:bootJar
+```http
+POST /api/v1/payments/{paymentId}/approve
 ```
 
-Avoid `clean check` for every small change. `clean` deletes Gradle build outputs and forces all modules to be rebuilt.
+Cancel payment:
+
+```http
+POST /api/v1/payments/{paymentId}/cancel
+```
+
+Get payment:
+
+```http
+GET /api/v1/payments/{paymentId}
+```
+
+Check payment table:
+
+```sql
+select id, booking_id, status, provider_payment_id
+from payment_payments
+order by created_at desc;
+```
+
+Check payment outbox:
+
+```sql
+select event_id, event_type, processing_status, retry_count, published_at
+from payment_outbox
+order by created_at desc;
+```
+
+Expected with `local-kafka` profile:
+
+```text
+processing_status = PUBLISHED
+published_at is not null
+```
 
 ## Documentation
 
@@ -287,23 +411,5 @@ Project documentation:
 - [Outbox](docs/outbox.md)
 - [Kafka](docs/kafka.md)
 - [Notification Service](docs/notification.md)
+- [Payment Service](docs/payment.md)
 - [Technical debt](docs/technical-debt.md)
-
-## Current limitations
-
-The project is not production-ready.
-
-Known limitations include:
-
-- no real external notification providers
-- no production user/profile service
-- no full saga/process manager yet
-- no payment service yet
-- no complete DLQ strategy
-- no schema registry
-- no production-grade admin model
-- limited observability
-- limited integration tests
-- notification APIs are not protected by real authentication and authorization yet
-
-These limitations are tracked intentionally and will be addressed in later milestones.

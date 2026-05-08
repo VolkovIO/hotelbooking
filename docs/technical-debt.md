@@ -8,7 +8,7 @@ The project is educational and is being developed step by step. Some technical d
 
 ## Current version
 
-Current project version: `0.8.0`
+Current project version: `0.9.0`
 
 Implemented milestones:
 
@@ -18,38 +18,78 @@ Implemented milestones:
 - `v0.6.2` inventory gRPC mTLS.
 - `v0.7.0` Kafka booking event publication.
 - `v0.8.0` notification service foundation.
+- `v0.9.0` payment service foundation.
 
 ## Cross-service architecture
 
 ### No full distributed transaction
 
-The system intentionally does not use a distributed transaction across Booking Service, Inventory Service and Notification Service.
+The system intentionally does not use a distributed transaction across Booking Service, Inventory Service, Payment Service and Notification Service.
 
 Current approach:
 
 - Booking Service owns booking state in PostgreSQL.
 - Inventory Service owns inventory state in MongoDB.
+- Payment Service owns payment state in PostgreSQL.
 - Notification Service owns notification state in MongoDB.
 - Kafka is used for asynchronous integration.
-- Outbox pattern is used for reliable booking event publication.
+- Outbox pattern is used for reliable event publication.
 
 Future saga/process-manager work is planned for later milestones.
 
 ### No full saga yet
 
-Booking confirmation and cancellation workflows are not yet coordinated by an explicit saga/process manager.
+Booking confirmation and payment authorization are not yet coordinated by an explicit saga/process manager.
+
+Current limitation:
+
+- Booking Service can create and confirm bookings.
+- Payment Service can authorize, approve and cancel payments.
+- These flows are still manually tested as separate service capabilities.
+- Booking Service does not yet command Payment Service.
+- Payment events do not yet drive Booking Service state transitions.
 
 Planned future work:
 
-- payment service
-- payment events
 - booking process manager
-- compensation logic
+- payment authorization step in booking workflow
+- inventory hold compensation on payment failure
+- payment cancellation compensation on booking cancellation
 - timeout handling
-- inventory release on payment failure
 - saga state persistence
+- correlation and causation propagation across services
 
-Target milestone: later than `v0.8.0`.
+Target milestone: `v0.10.0`.
+
+## Local infrastructure
+
+### One PostgreSQL container with multiple logical databases
+
+For local development, Booking Service and Payment Service share one PostgreSQL container.
+
+Current local setup:
+
+```text
+container: hotelbooking-postgres
+
+databases:
+- hotelbooking
+- hotelbooking_payment
+```
+
+This is intentional for the educational project. It reduces local infrastructure overhead while preserving logical database ownership per service.
+
+Current limitation:
+
+- one local PostgreSQL user is used for both databases
+- database-level user isolation is not modeled yet
+
+Future production-like improvement:
+
+- separate database users per service
+- least-privilege grants
+- independent migration permissions
+- separate physical database instances if operationally required
 
 ## Booking Service
 
@@ -145,7 +185,7 @@ Future improvements:
 
 ### No schema registry yet
 
-Booking events are serialized as JSON.
+Booking and payment events are serialized as JSON.
 
 Current limitations:
 
@@ -239,144 +279,221 @@ Future improvements:
 - multiple channels per user
 - event-specific preferences
 - quiet hours
-- priority settings
 - fallback channels
-- per-channel enabled flags
+- preference history
 
-### Notification templates
+### Skipped notification placeholder values
 
-Notification messages are currently static.
+When no notification preference is found, the service creates a `SKIPPED` notification with technical placeholder values.
 
-Examples:
-
-- `Your booking has been confirmed.`
-- `Your booking has been cancelled.`
-
-Future improvements:
-
-- template storage
-- event-specific variables
-- localization
-- channel-specific formatting
-- template versioning
-- preview tooling
-
-### Skipped notification channel placeholder
-
-When a user has no notification preference, the service creates a `SKIPPED` notification.
-
-Currently skipped notifications use:
+Current placeholder behavior:
 
 - `channel = EMAIL`
 - `destination = skipped`
+- `lastError = notification preference was not found`
 
-This is a technical placeholder to keep the aggregate simple.
+This is acceptable for the current milestone because it keeps the audit trail observable.
 
-A future refactoring may allow skipped notifications without delivery channel and destination.
+Future improvement:
 
-### Delivery retries are basic
+- model skipped notification destination more explicitly
+- avoid using a real channel enum value for a skipped/no-destination case if the domain evolves
 
-Delivery retry behavior is implemented at a basic level.
+## Payment Service
 
-Current behavior:
+Payment Service was introduced in `v0.9.0`.
 
-- failed delivery can be retried
-- max attempts are configurable
-- retry delay is configurable
-- delivery claiming prevents normal duplicate sending across instances
+### Fake provider only
 
-Future improvements:
+Payment Service currently uses a fake provider adapter.
 
-- exponential backoff
-- provider-specific retry classification
-- transient vs permanent error classification
-- DLQ for permanently failed notifications
-- operational dashboards
-- alerting on high failure rate
+Current limitation:
 
-### Delivery claiming needs operational visibility
+- no real acquiring integration
+- no real card authorization
+- no provider callbacks/webhooks
+- no refunds
+- no reconciliation
+- no provider-side idempotency keys beyond local fake behavior
 
-Notification delivery uses Mongo-based claim fields:
-
-- `lockedBy`
-- `lockedUntil`
-
-This makes scheduler operation safer with multiple instances.
+This is intentional for `v0.9.0`. The goal is to model the payment lifecycle and prepare for saga orchestration without depending on external payment infrastructure.
 
 Future improvements:
 
-- metrics for claimed notifications
-- metrics for expired locks
-- metrics for sent and failed notifications
-- admin inspection endpoint
-- stuck notification diagnostics
+- real provider adapter behind the existing provider port
+- provider idempotency keys
+- provider callback processing
+- reconciliation job
+- refund support
+- payment operation audit log
 
-### History API is intentionally simple
+### No card data model
 
-Notification history API currently supports:
+The service does not accept or store card data.
 
-- filtering by user id
-- limit parameter
-- newest-first sorting
+This is intentional. The project should avoid handling sensitive payment instrument data.
 
-Current limits:
+Future provider integration should prefer hosted payment pages, tokenized payment methods or provider-side card storage.
 
-- default limit: `10`
-- maximum limit: `100`
+### Payment API security
 
-Future improvements:
+Payment API is not protected by production authentication and authorization yet.
 
-- cursor pagination
-- filtering by status
-- filtering by notification type
-- filtering by date range
+Current endpoints:
 
-## Observability
+- `POST /api/v1/payments/authorize`
+- `POST /api/v1/payments/{paymentId}/approve`
+- `POST /api/v1/payments/{paymentId}/cancel`
+- `GET /api/v1/payments/{paymentId}`
 
-Current logging is useful for local development, but not enough for production.
+Current limitation:
 
-Future improvements:
-
-- structured logs with correlation id
-- service metrics
-- Kafka consumer lag metrics
-- outbox publication metrics
-- notification delivery metrics
-- tracing across HTTP, gRPC and Kafka
-- dashboards
-- alerts
-
-## Testing
-
-Current testing focuses on selected domain and service behavior.
+- caller can provide arbitrary `userId`
+- service does not derive user identity from security context
+- service does not verify that caller owns the booking/payment
 
 Future improvements:
 
-- more domain tests
-- application service tests
-- Mongo repository integration tests
-- Kafka consumer integration tests
-- Testcontainers-based tests
-- contract tests for Kafka events
-- security tests
+- protect public/user endpoints
+- derive user id from authenticated principal
+- restrict payment access by user ownership
+- separate internal service API from external user API
+- use mTLS or service token for internal commands from Booking Service or saga orchestrator
 
-## Documentation
+### Payment is not integrated with Booking Service yet
 
-Documentation is updated incrementally per milestone.
+Payment Service can be tested independently, but Booking Service does not use it yet.
 
-Important docs:
+Current limitation:
 
-- `README.md`
-- `docs/security-model.md`
-- `docs/outbox.md`
-- `docs/kafka.md`
-- `docs/notification.md`
-- `docs/technical-debt.md`
+- booking can be confirmed without payment orchestration
+- payment events are published but not consumed by Booking Service
+- no compensation is triggered from payment failure
+
+Planned future work:
+
+- booking process manager
+- inventory hold + payment authorization workflow
+- booking confirmation after successful payment
+- inventory release after payment decline
+- payment cancel after booking cancellation
+- timeout handling
+
+Target milestone: `v0.10.0`.
+
+### Payment outbox relay is basic
+
+Payment Service publishes payment events from a transactional outbox.
+
+Current limitations:
+
+- no dedicated outbox metrics
+- no DLQ for permanently failed payment event publication
+- no admin endpoint for inspecting failed outbox records
+- no replay tooling
+- retry policy is basic
 
 Future improvements:
 
-- architecture diagrams
-- event catalog
-- API examples
-- local troubleshooting guide
-- production-readiness checklist
+- producer metrics
+- failed outbox dashboard
+- DLQ topic
+- replay endpoint or maintenance command
+- structured last error details
+- alerting on stuck outbox rows
+
+### Payment correlation and causation are basic
+
+Payment outbox events contain:
+
+- `correlationId`
+- `causationId`
+
+Current limitation:
+
+- `correlationId` is initially derived from event id in simple flows
+- `causationId` is not yet propagated from incoming commands
+- no cross-service trace context is propagated into payment events yet
+
+Future improvements:
+
+- accept correlation id from incoming HTTP/internal commands
+- propagate booking saga correlation id
+- set causation id when payment events are caused by booking commands or saga commands
+- include trace ids in logs and event metadata
+
+### One payment per booking
+
+Current model assumes one payment per booking.
+
+This is enforced by a unique constraint on:
+
+```text
+payment_payments.booking_id
+```
+
+Current limitation:
+
+- no partial payments
+- no multiple payment attempts per booking
+- no payment method switching
+- no split payment
+
+This is acceptable for the current milestone.
+
+Future improvements:
+
+- explicit payment attempt model
+- multiple attempts per booking
+- retry after decline
+- support for alternative payment methods
+
+### Currency validation is basic
+
+Current domain validates only that currency is a non-blank 3-letter code and normalizes it to uppercase.
+
+Current limitation:
+
+- no ISO currency allow-list
+- unsupported 3-letter strings can pass validation
+
+Future improvements:
+
+- allow-list supported currencies
+- explicit business rule for supported markets
+- currency-specific minor unit validation
+
+### JPA persistence has limited test coverage
+
+Payment domain and application services are covered by unit tests.
+
+Current limitation:
+
+- no dedicated persistence integration tests for JPA mappings
+- no Testcontainers-based PostgreSQL tests for Liquibase + Hibernate validate
+
+Future improvements:
+
+- repository integration tests
+- Liquibase migration tests
+- Hibernate mapping validation tests
+- optimistic locking tests if versioning is introduced
+
+## Future release direction
+
+Planned next major milestone:
+
+```text
+v0.10.0 booking-payment saga / process manager
+```
+
+Expected topics:
+
+- explicit saga state
+- booking payment orchestration
+- compensation logic
+- payment decline handling
+- inventory release on failed payment
+- event correlation propagation
+- timeout handling
+- retry policy
