@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: payment-service
+  profiles:
+    group:
+      local:
+        - payment-dev
+
+server:
+  port: ${PAYMENT_SERVICE_PORT:8083}
+
+app:
+  payment:
+    provider:
+      fake:
+        enabled: true
