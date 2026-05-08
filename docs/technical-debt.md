@@ -1,556 +1,382 @@
 # Technical Debt
 
+## Purpose
+
+This document tracks intentional limitations, unfinished areas and known follow-up work.
+
+The project is educational and is being developed step by step. Some technical debt is accepted intentionally to keep each milestone focused and understandable.
+
 ## Current version
 
-`v0.6.2`
+Current project version: `0.8.0`
 
-The project is a learning-oriented backend for hotel booking.
+Implemented milestones:
 
-The main goal is to practice Clean Architecture, DDD tactical patterns, explicit module boundaries and the gradual transition from a modular monolith toward distributed services.
+- `v0.5.2` security and architecture hardening.
+- `v0.6.0` transactional booking outbox foundation.
+- `v0.6.1` outbox polling publisher.
+- `v0.6.2` inventory gRPC mTLS.
+- `v0.7.0` Kafka booking event publication.
+- `v0.8.0` notification service foundation.
 
-The project is intentionally not production-ready yet.
+## Cross-service architecture
 
-Current architectural focus:
+### No full distributed transaction
 
-```text
-separate booking and inventory service applications
-  -> explicit business module boundaries
-  -> PostgreSQL persistence for booking
-  -> MongoDB persistence for inventory
-  -> gRPC boundary between booking and inventory
-  -> Google JWT for external booking API access
-  -> booking ownership checks
-  -> transactional outbox foundation
-  -> outbox polling publisher with logging adapter
-  -> preparation for Kafka, mTLS and saga
-```
+The system intentionally does not use a distributed transaction across Booking Service, Inventory Service and Notification Service.
 
----
+Current approach:
 
-## Current implemented booking flow
+- Booking Service owns booking state in PostgreSQL.
+- Inventory Service owns inventory state in MongoDB.
+- Notification Service owns notification state in MongoDB.
+- Kafka is used for asynchronous integration.
+- Outbox pattern is used for reliable booking event publication.
 
-```text
-create booking
-  -> place inventory hold
-  -> booking becomes ON_HOLD
-  -> booking outbox event is stored
-  -> polling publisher logs the event
-  -> outbox row becomes PUBLISHED
+Future saga/process-manager work is planned for later milestones.
 
-confirm booking
-  -> confirm inventory hold
-  -> held rooms become booked rooms
-  -> booking becomes CONFIRMED
-  -> booking outbox event is stored
-  -> polling publisher logs the event
-  -> outbox row becomes PUBLISHED
+### No full saga yet
 
-cancel ON_HOLD booking
-  -> release inventory hold
-  -> booking becomes CANCELLED
-  -> booking outbox event is stored
-  -> polling publisher logs the event
-  -> outbox row becomes PUBLISHED
-
-cancel CONFIRMED booking
-  -> release booked inventory rooms
-  -> booking becomes CANCELLED
-  -> booking outbox event is stored
-  -> polling publisher logs the event
-  -> outbox row becomes PUBLISHED
-```
-
-A cancelled booking is not physically deleted. Cancellation is represented by the `CANCELLED` status.
-
----
-
-## Completed improvements
-
-### Module boundaries
-
-Booking and inventory are separated into explicit modules.
-
-Booking no longer depends directly on inventory domain objects. Integration goes through booking outbound ports and inventory published contracts.
-
-Current booking outbound ports:
-
-```text
-InventoryLookupPort
-InventoryReservationPort
-```
-
-The adapter between booking and inventory acts as an anti-corruption layer.
-
-It maps inventory-side application results and exceptions to booking-side contracts.
-
----
-
-### Transactional outbox foundation
-
-Starting from `v0.6.0`, the booking service stores booking lifecycle events in a transactional outbox.
-
-Implemented:
-
-```text
-booking_outbox table
-booking lifecycle event model
-booking outbox repository
-booking state + outbox event persistence in one PostgreSQL transaction
-```
-
-Current event types:
-
-```text
-BookingPlacedOnHold
-BookingConfirmed
-BookingCancelled
-```
-
-The transaction boundary is intentionally local to PostgreSQL:
-
-```text
-Booking aggregate save
-  + booking_outbox insert
-```
-
-This is now handled atomically.
-
----
-
-### Outbox polling publisher
-
-Starting from `v0.6.1`, the project has a polling outbox publisher with a logging adapter.
-
-Implemented:
-
-```text
-- claiming NEW events as PROCESSING
-- logging adapter publication
-- PUBLISHED status transition
-- retryable failures
-- terminal FAILED status
-- SKIP LOCKED based batch claiming
-```
-
-The current publisher does not send messages to Kafka yet.
-
-The logging adapter exists to validate outbox mechanics before Kafka is introduced.
-
----
-
-## v0.6.1 technical debt snapshot
-
-### Cross-service consistency
-
-Booking and inventory are persisted in different databases.
-
-Current booking flow still performs inventory operations before booking state persistence.
-
-Known risk:
-
-```text
-inventory operation succeeds
-booking persistence fails
-=> booking and inventory may become inconsistent
-```
-
-Examples:
-
-```text
-place inventory hold succeeds
-booking save fails
-=> orphan inventory hold
-
-confirm inventory hold succeeds
-booking save fails
-=> inventory and booking statuses diverge
-
-release inventory succeeds
-booking cancellation save fails
-=> inventory and booking statuses diverge
-```
-
-The transactional outbox does not solve cross-service atomicity by itself.
-
-It guarantees only this local atomic operation:
-
-```text
-booking state change
-  + booking outbox event insert
-```
-
-The larger distributed consistency problem is intentionally left for the saga/process manager work.
-
-Planned improvements:
-
-```text
-v0.7.0 Kafka event publication
-v0.10.0 booking process manager / saga
-```
-
----
-
-### Outbox publication
-
-The project now has the first outbox polling publisher.
-
-Implemented:
-
-```text
-- outbox table
-- lifecycle event model
-- atomic booking state + outbox persistence
-- polling publisher
-- status transitions
-- retryable failure handling
-- terminal failure handling
-- logging adapter
-```
-
-Not implemented yet:
-
-```text
-- Kafka publication
-- dead-letter topic
-- consumer inbox/idempotency
-```
-
-Planned for `v0.7.0`:
-
-```text
-- Kafka producer
-- booking.events topic
-- event envelope publication
-- dead-letter strategy
-```
-
----
-
-### Transaction boundaries
-
-Booking state and outbox event persistence now have a dedicated transactional boundary.
-
-The important rule is:
-
-```text
-bookingRepository.save(...)
-bookingOutboxRepository.save(...)
-```
-
-must either both commit or both roll back.
-
-Current implementation keeps the PostgreSQL transaction away from remote gRPC calls.
-
-Current order:
-
-```text
-call inventory
-  -> change booking state
-  -> persist booking and outbox in one local transaction
-```
-
-This avoids long database transactions around network operations.
-
-Remaining issue:
-
-```text
-the inventory operation is still outside the booking database transaction
-```
-
-This is expected until saga/process manager work.
-
----
-
-### Event contract maturity
-
-Current booking outbox events are application-level lifecycle events.
-
-They are not yet part of a full event contract strategy.
-
-Future improvements:
-
-```text
-- event envelope standardization
-- correlationId
-- causationId
-- event schema documentation
-- event compatibility rules
-- Kafka topic naming convention
-```
-
-Current event version:
-
-```text
-1
-```
-
-Event versioning should be preserved as consumers are introduced.
-
----
-
-### Service-to-service security
-
-Booking-to-inventory gRPC communication is protected by local development mTLS.
-
-Implemented:
-```text
-- inventory gRPC server TLS
-- client certificate requirement
-- booking gRPC client certificate
-- local development CA
-- booking-service client identity check
-```
-
-Remaining future work:
-```text
-- certificate rotation strategy
-- production certificate management
-- possible SPIFFE/SPIRE evaluation
-- service-level tests for rejected unauthenticated clients
-```
-
----
-
-### Inventory reservation identity
-
-Booking currently stores `holdId` only while the booking is in `ON_HOLD`.
-
-After confirmation, the hold id is cleared.
-
-Future improvement:
-
-```text
-introduce inventoryReservationId
-keep stable reservation identity after confirmation
-use it for cancellation, audit and saga compensation
-```
-
----
-
-### Inventory concurrency
-
-Inventory availability updates are not yet protected from concurrent lost updates.
-
-Future improvements:
-
-```text
-- optimistic locking for Mongo documents
-- conditional updates for availability reservation
-- retry policy for version conflicts
-- repository contract tests for concurrent reservation scenarios
-```
-
-This should be addressed before the project is considered portfolio-ready.
-
----
-
-### Idempotency
-
-Current command operations are not idempotent.
-
-Future improvements:
-
-```text
-- HTTP Idempotency-Key for booking creation
-- eventId-based consumer deduplication
-- inbox table for Kafka consumers
-- idempotent payment command handling
-- idempotent notification delivery handling
-```
-
-This becomes especially important after Kafka and payment are introduced.
-
----
-
-### Inbox pattern
-
-After Kafka consumers are introduced, consumers should be idempotent.
-
-Future consumer services:
-
-```text
-notification-service
-payment-service
-audit-service
-booking-process-manager
-```
-
-Possible table:
-
-```text
-processed_events
-  event_id
-  consumer_name
-  processed_at
-```
-
-This prevents duplicate processing when Kafka redelivers an event.
-
----
-
-### Notification delivery
-
-Notification service is planned as an extensible service.
-
-Target channels:
-
-```text
-EMAIL
-TELEGRAM
-MAX
-```
-
-Notification failures should not cancel a successfully confirmed booking.
-
-Target principle:
-
-```text
-booking success does not depend on notification delivery success
-```
-
-Notification delivery should have its own status and retry model.
-
----
-
-### Payment service
-
-Payment service is planned as a symbolic educational service.
-
-It does not need real bank integration.
-
-It should demonstrate:
-
-```text
-- payment aggregate
-- approve / decline / cancel operations
-- payment status transitions
-- payment events
-- failure path that triggers saga compensation
-```
-
----
-
-### Saga / process manager
-
-Saga is planned after payment service foundation.
-
-Target approach:
-
-```text
-orchestrated saga / booking process manager
-```
-
-Reason:
-
-```text
-- explicit process state
-- explicit compensation logic
-- easier to explain in interviews
-- better for learning than pure choreography
-```
-
-The first implementation should be a lightweight custom process manager, not Temporal or Camunda.
-
-Temporal/Camunda may be evaluated later.
-
----
-
-### Audit
-
-Audit is planned as a minimal symbolic service.
-
-It should consume cross-cutting events and store audit records.
-
-Audit should not block the main booking/payment process.
-
----
-
-### Observability and resilience
-
-The project does not yet have centralized observability.
+Booking confirmation and cancellation workflows are not yet coordinated by an explicit saga/process manager.
 
 Planned future work:
 
-```text
-- structured logs
-- correlationId and causationId in events
-- OpenTelemetry tracing
-- Prometheus metrics
-- Grafana dashboards
-- ELK/OpenSearch logs
-- gRPC deadlines
-- gRPC retries
-- Kafka consumer metrics
-```
+- payment service
+- payment events
+- booking process manager
+- compensation logic
+- timeout handling
+- inventory release on payment failure
+- saga state persistence
 
----
+Target milestone: later than `v0.8.0`.
 
-### Contract and integration testing
+## Booking Service
 
-Current tests cover many domain and application scenarios, but service-level testing should be extended.
+### Outbox relay is still basic
+
+Booking Service publishes events from the transactional outbox.
+
+Current limitations:
+
+- no dedicated outbox metrics
+- no dead-letter topic for permanently failed publication
+- no admin endpoint for outbox inspection
+- no advanced alerting
+- no payload schema registry
 
 Future improvements:
 
-```text
-- Testcontainers for PostgreSQL
-- Testcontainers for MongoDB
-- Testcontainers for Kafka
-- gRPC boundary tests
-- service-level integration tests
-- event contract tests
-- repository contract tests
-```
+- producer metrics
+- DLQ strategy
+- operational dashboard
+- event schema evolution policy
+- replay tooling
 
----
+### Correlation and causation IDs are basic
 
-### Documentation and ADRs
+Booking outbox events currently contain:
 
-Architecture decisions should be documented as ADRs.
+- `correlationId`
+- `causationId`
 
-Suggested ADRs:
+Current limitation:
 
-```text
-ADR-001: Modular architecture and bounded contexts
-ADR-002: PostgreSQL for booking and MongoDB for inventory
-ADR-003: Transactional outbox
-ADR-004: mTLS for service-to-service communication
-ADR-005: Saga orchestration over choreography
-ADR-006: Notification failures do not cancel bookings
-ADR-007: Symbolic payment provider for educational MVP
-```
+- `correlationId` is initially derived from event id in simple flows.
+- `causationId` is not fully propagated across all use cases.
 
----
+Future improvements:
 
-## Roadmap
+- propagate correlation id from incoming HTTP requests
+- propagate correlation id through gRPC calls
+- propagate correlation id through Kafka consumers and producers
+- use causation id when one event causes another event
 
-```text
-v0.6.2
-  inventory gRPC mTLS
+## Inventory Service
 
-v0.7.0
-  Kafka infrastructure and event publication
+### Local development admin model
 
-v0.8.0
-  notification service foundation
+Inventory Service currently uses a development security model for local admin operations.
 
-v0.9.0
-  symbolic payment service
+Current limitation:
 
-v0.10.0
-  booking process manager / saga and compensation
+- local admin is a mock/dev identity
+- no real admin user management
+- no production-grade authorization model
 
-v0.11.0
-  frontend or BFF with Google login
+Future improvements:
 
-v0.12.0
-  audit service
+- real admin authentication
+- role management
+- audit logging for inventory changes
 
-v0.13.0
-  observability and resilience
+### Public catalog access
 
-v0.14.0
-  service-level integration tests, CI, diagrams, ADRs
+Public catalog endpoints are intentionally accessible without authentication.
 
-v1.0.0
-  portfolio-ready release
-```
+This is expected because users should be able to browse hotels and rooms before login.
+
+Security must remain explicit:
+
+- public catalog endpoints are allowed
+- modifying endpoints require admin authorization
+- deny-by-default rules should remain in place
+
+## gRPC and mTLS
+
+### Local certificates are development-only
+
+mTLS certificates generated for local development are not production certificates.
+
+Current limitations:
+
+- local certificate generation script is for developer machines
+- certificate rotation is not implemented
+- production CA process is not defined
+
+Future improvements:
+
+- production certificate management
+- certificate rotation
+- certificate expiration monitoring
+- stronger service identity model
+
+## Kafka
+
+### No schema registry yet
+
+Booking events are serialized as JSON.
+
+Current limitations:
+
+- no schema registry
+- no compatibility checks
+- no formal schema version migration process
+
+Future improvements:
+
+- schema registry
+- compatibility tests
+- explicit event contracts
+- consumer-driven contract tests
+
+### DLQ is not implemented yet
+
+Current producer and consumer flows do not have a complete dead-letter strategy.
+
+Future improvements:
+
+- topic-level DLQ naming convention
+- DLQ payload format
+- DLQ replay process
+- monitoring and alerts
+
+## Notification Service
+
+Notification Service was introduced in `v0.8.0`.
+
+### Logging senders only
+
+Notification Service currently uses logging sender adapters only.
+
+Real delivery providers are not implemented yet:
+
+- email provider
+- Telegram bot integration
+- MAX integration
+
+This is intentional for the current milestone. The application layer already uses sender ports, so real providers can be added later without changing the core delivery flow.
+
+### API security
+
+Notification preference and history APIs are not protected by real authentication and authorization yet.
+
+Current endpoints:
+
+- `PUT /api/v1/notification-preferences/{userId}`
+- `GET /api/v1/notification-preferences/{userId}`
+- `GET /api/v1/notifications?userId=...`
+
+Before production use, the service must ensure that users can only manage and read their own notification preferences and history.
+
+Future improvements:
+
+- authenticate user requests
+- derive user id from security context
+- prevent users from reading or modifying another user's preferences
+- add admin-only support endpoints if needed
+
+### User profile integration
+
+Notification Service currently stores notification preferences directly through its own API.
+
+In a larger production system, user contact data and notification preferences may come from a dedicated user/profile service.
+
+Preferred future approach:
+
+- Profile Service publishes user preference events.
+- Notification Service consumes these events.
+- Notification Service builds its own local read model.
+- Booking Service remains decoupled from notification delivery details.
+
+Booking Service should not call Notification Service to decide where to send notifications.
+
+Booking Service should only publish business events.
+
+### One preference per user
+
+Current model supports one notification preference per user.
+
+Current fields:
+
+- user id
+- channel
+- destination
+- enabled flag
+
+Future improvements:
+
+- multiple channels per user
+- event-specific preferences
+- quiet hours
+- priority settings
+- fallback channels
+- per-channel enabled flags
+
+### Notification templates
+
+Notification messages are currently static.
+
+Examples:
+
+- `Your booking has been confirmed.`
+- `Your booking has been cancelled.`
+
+Future improvements:
+
+- template storage
+- event-specific variables
+- localization
+- channel-specific formatting
+- template versioning
+- preview tooling
+
+### Skipped notification channel placeholder
+
+When a user has no notification preference, the service creates a `SKIPPED` notification.
+
+Currently skipped notifications use:
+
+- `channel = EMAIL`
+- `destination = skipped`
+
+This is a technical placeholder to keep the aggregate simple.
+
+A future refactoring may allow skipped notifications without delivery channel and destination.
+
+### Delivery retries are basic
+
+Delivery retry behavior is implemented at a basic level.
+
+Current behavior:
+
+- failed delivery can be retried
+- max attempts are configurable
+- retry delay is configurable
+- delivery claiming prevents normal duplicate sending across instances
+
+Future improvements:
+
+- exponential backoff
+- provider-specific retry classification
+- transient vs permanent error classification
+- DLQ for permanently failed notifications
+- operational dashboards
+- alerting on high failure rate
+
+### Delivery claiming needs operational visibility
+
+Notification delivery uses Mongo-based claim fields:
+
+- `lockedBy`
+- `lockedUntil`
+
+This makes scheduler operation safer with multiple instances.
+
+Future improvements:
+
+- metrics for claimed notifications
+- metrics for expired locks
+- metrics for sent and failed notifications
+- admin inspection endpoint
+- stuck notification diagnostics
+
+### History API is intentionally simple
+
+Notification history API currently supports:
+
+- filtering by user id
+- limit parameter
+- newest-first sorting
+
+Current limits:
+
+- default limit: `10`
+- maximum limit: `100`
+
+Future improvements:
+
+- cursor pagination
+- filtering by status
+- filtering by notification type
+- filtering by date range
+
+## Observability
+
+Current logging is useful for local development, but not enough for production.
+
+Future improvements:
+
+- structured logs with correlation id
+- service metrics
+- Kafka consumer lag metrics
+- outbox publication metrics
+- notification delivery metrics
+- tracing across HTTP, gRPC and Kafka
+- dashboards
+- alerts
+
+## Testing
+
+Current testing focuses on selected domain and service behavior.
+
+Future improvements:
+
+- more domain tests
+- application service tests
+- Mongo repository integration tests
+- Kafka consumer integration tests
+- Testcontainers-based tests
+- contract tests for Kafka events
+- security tests
+
+## Documentation
+
+Documentation is updated incrementally per milestone.
+
+Important docs:
+
+- `README.md`
+- `docs/security-model.md`
+- `docs/outbox.md`
+- `docs/kafka.md`
+- `docs/notification.md`
+- `docs/technical-debt.md`
+
+Future improvements:
+
+- architecture diagrams
+- event catalog
+- API examples
+- local troubleshooting guide
+- production-readiness checklist

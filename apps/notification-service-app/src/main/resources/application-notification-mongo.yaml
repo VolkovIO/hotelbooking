@@ -1,0 +1,7 @@
+spring:
+  config:
+    activate:
+      on-profile: notification-mongo
+  data:
+    mongodb:
+      uri: ${NOTIFICATION_MONGODB_URI:mongodb://localhost:27017/hotelbooking_notification}
