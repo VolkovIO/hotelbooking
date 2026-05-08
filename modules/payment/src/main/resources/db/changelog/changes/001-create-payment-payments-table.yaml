@@ -1,0 +1,91 @@
+databaseChangeLog:
+  - changeSet:
+      id: 001-create-payment-payments-table
+      author: volkovself
+      changes:
+        - createTable:
+            tableName: payment_payments
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: booking_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: user_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+              - column:
+                  name: amount
+                  type: numeric(19,2)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: currency
+                  type: varchar(3)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: provider
+                  type: varchar(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: status
+                  type: varchar(32)
+                  constraints:
+                    nullable: false
+              - column:
+                  name: provider_payment_id
+                  type: varchar(128)
+              - column:
+                  name: failure_reason
+                  type: varchar(1000)
+              - column:
+                  name: created_at
+                  type: timestamp with time zone
+                  constraints:
+                    nullable: false
+              - column:
+                  name: authorized_at
+                  type: timestamp with time zone
+              - column:
+                  name: approved_at
+                  type: timestamp with time zone
+              - column:
+                  name: declined_at
+                  type: timestamp with time zone
+              - column:
+                  name: cancelled_at
+                  type: timestamp with time zone
+              - column:
+                  name: updated_at
+                  type: timestamp with time zone
+                  constraints:
+                    nullable: false
+
+        - addUniqueConstraint:
+            tableName: payment_payments
+            columnNames: booking_id
+            constraintName: uq_payment_payments_booking_id
+
+        - createIndex:
+            tableName: payment_payments
+            indexName: ix_payment_payments_status
+            columns:
+              - column:
+                  name: status
+
+        - createIndex:
+            tableName: payment_payments
+            indexName: ix_payment_payments_user_id
+            columns:
+              - column:
+                  name: user_id

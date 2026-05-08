@@ -1,0 +1,36 @@
+spring:
+  application:
+    name: payment-service
+  output:
+    ansi:
+      enabled: ALWAYS
+  profiles:
+    group:
+      local:
+        - payment-postgres
+        - payment-dev
+      local-kafka:
+        - payment-postgres
+        - payment-dev
+        - payment-outbox-publisher
+        - payment-outbox-kafka
+
+server:
+  port: ${PAYMENT_SERVICE_PORT:8083}
+
+app:
+  payment:
+    provider:
+      fake:
+        enabled: true
+        always-decline: false
+    kafka:
+      payment-events-topic: ${PAYMENT_EVENTS_TOPIC:payment.events}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
