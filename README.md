@@ -1,538 +1,309 @@
 # Hotel Booking
 
-A learning-oriented backend for hotel booking, built with Java and Spring Boot.
+Educational hotel booking project for practicing backend architecture and Senior Java engineering topics.
 
-The project demonstrates an evolutionary architecture path:
+The project is intentionally developed step by step through small milestones.
 
-```text
-modular monolith
-  -> explicit module boundaries
-  -> gRPC boundary between modules
-  -> separately runnable service applications
-  -> security and ownership model
-  -> transactional outbox
-  -> outbox polling publisher
-  -> Kafka integration
-  -> saga/process manager
-  -> observability and resilience
-```
+Main topics:
 
-The main goal of the project is to practice Clean Architecture, DDD tactical patterns, modular design, persistence boundaries, transport contracts and the gradual transition from a modular monolith toward distributed services.
+- Clean Architecture
+- DDD-inspired domain modeling
+- modular Gradle project structure
+- Spring Boot applications
+- PostgreSQL
+- MongoDB
+- transactional outbox
+- Kafka
+- gRPC
+- mTLS
+- service-to-service communication
+- event-driven architecture
+- notification delivery flow
+- production-like technical debt tracking
 
-The project is intentionally not production-ready yet.
+## Current version
 
----
+Current project version: `0.8.0`
 
-## Current stage: v0.7.0
+Implemented milestones:
 
-Starting from `v0.5.0`, the booking service supports:
-
-```text
-Google JWT authentication
-internal application user mapping
-booking ownership checks
-Google JWT audience validation
-```
-
-Starting from `v0.5.2`, the project clarifies the target security model:
-
-```text
-User / Frontend
-  -> Booking HTTP API
-  -> Google JWT
-
-Booking service
-  -> Inventory gRPC API
-  -> mTLS
-```
-
-Starting from `v0.6.0`, the booking service records lifecycle events in a transactional outbox.
-
-Starting from `v0.6.1`, the booking service includes a scheduled outbox polling publisher.
-
-The current publisher uses a logging adapter and does not send events to Kafka yet.
-
-Kafka publication is planned for `v0.7.0`.
-
----
-
-## Project goals
-
-This project is not just a CRUD hotel booking application.
-
-The educational goal is to demonstrate senior-level backend topics:
-
-```text
-Clean Architecture
-DDD tactical patterns
-Hexagonal Architecture
-module boundaries
-anti-corruption layer
-PostgreSQL persistence
-MongoDB persistence
-gRPC integration
-Google JWT authentication
-booking ownership
-transactional outbox
-outbox polling and retry handling
-Kafka integration
-idempotency
-mTLS service-to-service security
-symbolic payment flow
-notification service
-saga/process manager
-audit events
-observability
-Testcontainers and integration testing
-```
-
----
+- `v0.5.2` security and architecture hardening
+- `v0.6.0` transactional booking outbox foundation
+- `v0.6.1` outbox polling publisher
+- `v0.6.2` inventory gRPC mTLS
+- `v0.7.0` Kafka booking event publication
+- `v0.8.0` notification service foundation
 
 ## Project structure
 
-```text
-hotelbooking/
-  settings.gradle
-  build.gradle
+The project uses a multi-module Gradle structure.
 
-  apps/
-    booking-service-app/
-    inventory-service-app/
-
-  modules/
-    booking/
-    inventory/
-    inventory-grpc-api/
-
-  docs/
-    security-model.md
-    technical-debt.md
-    outbox.md
-    logging-strategy.md
-```
-
----
-
-## Applications
-
-### booking-service-app
-
-`apps/booking-service-app` is the booking runtime application.
-
-It exposes the booking HTTP API, stores booking data in PostgreSQL, writes booking events to the outbox and calls inventory through gRPC.
-
-Responsibilities:
+Applications:
 
 ```text
-booking lifecycle
-booking ownership
-Google JWT based external user authentication
-PostgreSQL booking persistence
-transactional outbox
-outbox polling publisher
-gRPC client adapter to inventory
+apps/booking-service-app
+apps/inventory-service-app
+apps/notification-service-app
 ```
 
-### inventory-service-app
-
-`apps/inventory-service-app` is the inventory runtime application.
-
-It exposes the inventory HTTP API, stores inventory data in MongoDB and exposes the inventory gRPC server.
-
-Responsibilities:
+Business modules:
 
 ```text
-hotel catalog
-room types
-room availability
-room holds
-MongoDB inventory persistence
-gRPC server adapter for booking integration
+modules/booking
+modules/inventory
+modules/inventory-grpc-api
+modules/notification
 ```
 
----
+## Services
 
-## Runtime architecture
+### Booking Service
 
-Current runtime flow:
+Booking Service owns booking state.
 
-```text
-Client / Swagger / Future Frontend
-  -> booking-service-app HTTP API :8080
-  -> BookingController
-  -> Booking application use case
-  -> InventoryLookupPort / InventoryReservationPort
-  -> booking gRPC client adapter
-  -> inventory-service-app gRPC API :9090
-  -> inventory gRPC server adapter
-  -> Inventory application use case
-  -> MongoDB
-```
+Main responsibilities:
 
-Booking state and outbox flow:
+- create booking
+- confirm booking
+- cancel booking
+- interact with Inventory Service through gRPC
+- persist booking lifecycle events into a transactional outbox
+- publish booking events to Kafka
 
-```text
-Booking application use case
-  -> booking state change
-  -> BookingStateChangePersistenceService
-  -> PostgreSQL booking table
-  -> PostgreSQL booking_outbox table
-```
+Storage:
 
-Outbox polling flow:
+- PostgreSQL
 
-```text
-BookingOutboxScheduler
-  -> BookingOutboxPollingService
-  -> claim NEW outbox rows as PROCESSING
-  -> LoggingBookingOutboxEventPublisher
-  -> mark rows as PUBLISHED / NEW retry / FAILED
-```
+Important integration points:
 
-Allowed dependency:
+- gRPC client to Inventory Service
+- Kafka producer for `booking.events`
 
-```text
-booking -> inventory-grpc-api
-```
+### Inventory Service
 
-Forbidden dependency:
+Inventory Service owns hotel, room and inventory state.
 
-```text
-booking -> inventory domain/application
-```
+Main responsibilities:
 
----
+- expose public hotel catalog APIs
+- manage inventory
+- handle booking hold/confirmation/cancellation commands through gRPC
+- protect internal gRPC communication with mTLS
 
-## Booking lifecycle
+Storage:
 
-The booking module currently supports the following lifecycle:
+- MongoDB
 
-| State | Meaning |
-|---|---|
-| `ON_HOLD` | Booking was created and inventory rooms are temporarily held |
-| `CONFIRMED` | Booking was confirmed and held rooms were converted to booked rooms |
-| `CANCELLED` | Booking was cancelled |
+Public catalog endpoints are accessible without user authentication.
 
-Current supported transitions:
+Admin endpoints are protected by local development security in the current version.
 
-| Operation | From | To | Inventory effect | Outbox event |
-|---|---|---|---|---|
-| Create booking | - | `ON_HOLD` | Places an inventory hold | `BookingPlacedOnHold` |
-| Confirm booking | `ON_HOLD` | `CONFIRMED` | Converts held rooms to booked rooms | `BookingConfirmed` |
-| Cancel held booking | `ON_HOLD` | `CANCELLED` | Releases the inventory hold | `BookingCancelled` |
-| Cancel confirmed booking | `CONFIRMED` | `CANCELLED` | Releases booked inventory rooms | `BookingCancelled` |
+### Notification Service
 
-A booking is not physically deleted when it is cancelled.
-Cancellation is represented by the `CANCELLED` status.
+Notification Service consumes booking lifecycle events from Kafka and creates user notifications.
 
----
+Current capabilities:
 
-## Transactional outbox
+- consumes `booking.events`
+- handles `BookingConfirmed`
+- handles `BookingCancelled`
+- ignores unsupported booking events such as `BookingPlacedOnHold`
+- stores notifications in MongoDB
+- stores user notification preferences in MongoDB
+- supports EMAIL, TELEGRAM and MAX channels through logging adapters
+- uses idempotent event handling
+- uses Mongo-based delivery claiming for multi-instance safety
+- exposes notification preference API
+- exposes notification history API
 
-The booking service records booking lifecycle events in a PostgreSQL outbox table.
+Storage:
 
-Current event types:
+- MongoDB database `hotelbooking_notification`
 
-```text
-BookingPlacedOnHold
-BookingConfirmed
-BookingCancelled
-```
+Notification Service does not call real external providers yet. EMAIL, TELEGRAM and MAX senders currently write to logs only.
 
-Current outbox statuses:
+## Infrastructure
 
-```text
-NEW
-PROCESSING
-PUBLISHED
-FAILED
-```
+Local infrastructure is started through Docker Compose.
 
-The local transaction guarantees:
+Typical infrastructure services:
 
-```text
-booking state change
-  + booking outbox event insert
-```
+- PostgreSQL
+- MongoDB
+- Kafka
 
-The current publisher is a scheduled polling publisher with a logging adapter.
-
-This means events are processed like this:
-
-```text
-NEW
-  -> PROCESSING
-  -> PUBLISHED
-```
-
-On failure:
-
-```text
-PROCESSING
-  -> NEW with next_attempt_at for retry
-  -> or FAILED when max attempts are reached
-```
-
-Kafka is not used yet.
-
-More details:
-
-```text
-docs/outbox.md
-```
-
----
-
-## Security model
-
-The project separates external user authentication from internal service authentication.
-
-Target model:
-
-```text
-External user access:
-  User / Frontend
-    -> Booking HTTP API
-    -> Google JWT
-
-Internal service access:
-  Booking service
-    -> Inventory gRPC API
-    -> mTLS
-```
-
-Google JWT is used for user identity and booking ownership.
-
-mTLS is the target model for booking-to-inventory gRPC communication.
-
-More details:
-
-```text
-docs/security-model.md
-```
-
----
-
-## Public browsing before login
-
-A user should be able to browse hotels, room types and availability before logging in.
-
-Public inventory catalog endpoints:
-
-```text
-GET /api/v1/hotels
-GET /api/v1/hotels/{hotelId}
-GET /api/v1/hotels/{hotelId}/room-types/{roomTypeId}/availability
-```
-
-Booking creation requires authentication:
-
-```text
-POST /api/v1/bookings
-```
-
----
-
-## Running locally
-
-Docker Desktop must be running, and ports `5432`, `27017`, `8080`, `8081` and `9090` must be free.
-
-Start PostgreSQL and MongoDB:
+Start infrastructure:
 
 ```bash
 docker compose up -d
 ```
 
-Start inventory service in one terminal:
-
-```bash
-./gradlew :apps:inventory-service-app:bootRun --args="--spring.profiles.active=local"
-```
-
-On Windows:
-
-```bash
-gradlew.bat :apps:inventory-service-app:bootRun --args="--spring.profiles.active=local"
-```
-
-Start booking service in another terminal:
-
-```bash
-./gradlew :apps:booking-service-app:bootRun --args="--spring.profiles.active=local"
-```
-
-On Windows:
-
-```bash
-gradlew.bat :apps:booking-service-app:bootRun --args="--spring.profiles.active=local"
-```
-
-Booking service endpoints:
-
-```text
-HTTP API:  http://localhost:8080
-Swagger:   http://localhost:8080/swagger-ui/index.html
-```
-
-Inventory service endpoints:
-
-```text
-HTTP API:  http://localhost:8081
-Swagger:   http://localhost:8081/swagger-ui/index.html
-gRPC API:  localhost:9090
-```
-
----
-
 ## Local profiles
 
-Booking local profile expands to:
+### Booking Service
+
+Typical local profile:
 
 ```text
-booking-postgres
-inventory-grpc-client
-security-dev
-outbox-publisher
-outbox-logging
+local
 ```
 
-Inventory local profile expands to:
+Kafka-enabled local profile:
 
 ```text
-inventory-mongo
-inventory-grpc-server
-security-dev
+local-kafka
 ```
 
----
-
-## Verifying outbox processing
-
-After creating, confirming or cancelling a booking, check the outbox table:
-
-```sql
-select id, event_type, status, attempts, published_at, last_error
-from booking_outbox
-order by created_at desc;
-```
-
-Expected result in local mode:
+JWT-enabled local profile:
 
 ```text
-status = PUBLISHED
-published_at is not null
+local-jwt
 ```
 
-The booking service logs should include messages from the logging outbox publisher.
+JWT and Kafka-enabled local profile:
 
----
+```text
+local-jwt-kafka
+```
 
-## Build and quality checks
+### Inventory Service
 
-Run tests:
+Typical local profile:
+
+```text
+local
+```
+
+Inventory Service uses local development security for admin operations.
+
+### Notification Service
+
+Typical local profile:
+
+```text
+local
+```
+
+Expected profile group:
+
+- `notification-mongo`
+- `notification-kafka`
+- `notification-senders-logging`
+
+Run Notification Service locally:
 
 ```bash
-./gradlew test
+gradlew.bat :apps:notification-service-app:bootRun --args="--spring.profiles.active=local"
 ```
 
-Run full verification checks:
+## Kafka
+
+Booking Service publishes booking lifecycle events to Kafka.
+
+Current topic:
+
+```text
+booking.events
+```
+
+Notification Service consumes this topic.
+
+Current consumer group:
+
+```text
+notification-service
+```
+
+Kafka event publication is based on the Booking Service transactional outbox.
+
+## Notification local verification
+
+Start infrastructure:
 
 ```bash
-./gradlew clean check
+docker compose up -d
 ```
 
-On Windows:
+Run Inventory Service.
+
+Run Booking Service with Kafka profile.
+
+Run Notification Service:
 
 ```bash
-gradlew.bat clean check
+gradlew.bat :apps:notification-service-app:bootRun --args="--spring.profiles.active=local"
 ```
 
-Format code:
+Create or update notification preference:
 
 ```bash
-./gradlew spotlessApply
+curl -X PUT "http://localhost:8082/api/v1/notification-preferences/2e1ecd64-e449-49a0-8744-eb5473c8e76b" ^
+  -H "Content-Type: application/json" ^
+  -d "{\"channel\":\"EMAIL\",\"destination\":\"user@example.com\",\"enabled\":true}"
 ```
 
-Build service jars:
+Create a booking and confirm it.
+
+Expected behavior:
+
+- `BookingPlacedOnHold` event is ignored by Notification Service.
+- `BookingConfirmed` event creates a notification.
+- Delivery scheduler claims the notification.
+- Logging EMAIL sender writes a log message.
+- Notification status becomes `SENT`.
+
+Get notification history:
 
 ```bash
-./gradlew :apps:inventory-service-app:bootJar
-./gradlew :apps:booking-service-app:bootJar
+curl "http://localhost:8082/api/v1/notifications?userId=2e1ecd64-e449-49a0-8744-eb5473c8e76b&limit=10"
 ```
 
----
+## Build and checks
+
+Run full check:
+
+```bash
+gradlew.bat check
+```
+
+For faster checks during development, prefer module-level commands.
+
+Examples:
+
+```bash
+gradlew.bat :modules:notification:check
+gradlew.bat :modules:notification:pmdMain
+gradlew.bat :modules:notification:pmdTest
+gradlew.bat :apps:notification-service-app:bootJar
+```
+
+Avoid `clean check` for every small change. `clean` deletes Gradle build outputs and forces all modules to be rebuilt.
+
+## Documentation
+
+Project documentation:
+
+- [Security model](docs/security-model.md)
+- [Outbox](docs/outbox.md)
+- [Kafka](docs/kafka.md)
+- [Notification Service](docs/notification.md)
+- [Technical debt](docs/technical-debt.md)
 
 ## Current limitations
 
-This project is still a learning system.
+The project is not production-ready.
 
-Known limitations:
+Known limitations include:
 
-```text
-no frontend login flow yet
-no service-to-service mTLS yet
-no distributed transaction handling
-no Kafka integration yet
-no saga/process manager yet
-no payment service yet
-no notification service yet
-no audit service yet
-no production-grade idempotency model yet
-no consumer inbox pattern yet
-no centralized observability yet
-service-level integration tests need to be restored and extended
-```
+- no real external notification providers
+- no production user/profile service
+- no full saga/process manager yet
+- no payment service yet
+- no complete DLQ strategy
+- no schema registry
+- no production-grade admin model
+- limited observability
+- limited integration tests
+- notification APIs are not protected by real authentication and authorization yet
 
-More details:
-
-```text
-docs/technical-debt.md
-```
-
----
-
-## Roadmap
-
-```text
-v0.6.2
-  inventory gRPC mTLS
-
-v0.7.0
-  Kafka infrastructure and event publication
-
-v0.8.0
-  notification service foundation
-
-v0.9.0
-  symbolic payment service
-
-v0.10.0
-  booking process manager / saga and compensation
-
-v0.11.0
-  frontend or BFF with Google login
-
-v0.12.0
-  audit service
-
-v0.13.0
-  observability and resilience
-
-v0.14.0
-  service-level integration tests, CI, diagrams, ADRs
-
-v1.0.0
-  portfolio-ready release
-```
-
----
-
-## Portfolio positioning
-
-The project can be presented as:
-
-```text
-Educational distributed booking platform demonstrating Clean Architecture, DDD,
-transactional outbox, Kafka-based integration, mTLS service-to-service security,
-saga orchestration, idempotency, observability and production-oriented testing.
-```
+These limitations are tracked intentionally and will be addressed in later milestones.
