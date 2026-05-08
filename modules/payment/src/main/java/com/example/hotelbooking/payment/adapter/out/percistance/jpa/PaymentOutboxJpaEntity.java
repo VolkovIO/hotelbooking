@@ -112,4 +112,30 @@ class PaymentOutboxJpaEntity {
         publishedAt,
         updatedAt);
   }
+
+  void markProcessing(Instant now) {
+    this.processingStatus = PaymentOutboxStatus.PROCESSING.name();
+    this.updatedAt = now;
+  }
+
+  void markPublished(Instant now) {
+    this.processingStatus = PaymentOutboxStatus.PUBLISHED.name();
+    this.publishedAt = now;
+    this.updatedAt = now;
+  }
+
+  void markRetryableFailure(String errorMessage, Instant nextAttemptAt, Instant now) {
+    this.processingStatus = PaymentOutboxStatus.NEW.name();
+    this.retryCount++;
+    this.nextAttemptAt = nextAttemptAt;
+    this.lastError = errorMessage;
+    this.updatedAt = now;
+  }
+
+  void markTerminalFailure(String errorMessage, Instant now) {
+    this.processingStatus = PaymentOutboxStatus.FAILED.name();
+    this.retryCount++;
+    this.lastError = errorMessage;
+    this.updatedAt = now;
+  }
 }
