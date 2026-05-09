@@ -24,6 +24,7 @@ app:
       fake:
         enabled: true
         always-decline: false
+        decline-amount-greater-than: 50000.00
     kafka:
       payment-events-topic: ${PAYMENT_EVENTS_TOPIC:payment.events}
 
