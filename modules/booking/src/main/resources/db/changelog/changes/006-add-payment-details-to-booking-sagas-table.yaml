@@ -1,0 +1,19 @@
+databaseChangeLog:
+  - changeSet:
+      id: 006-add-payment-details-to-booking-sagas-table
+      author: volkovself
+      changes:
+        - addColumn:
+            tableName: booking_sagas
+            columns:
+              - column:
+                  name: payment_amount
+                  type: numeric(19,2)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: payment_currency
+                  type: varchar(3)
+                  constraints:
+                    nullable: false

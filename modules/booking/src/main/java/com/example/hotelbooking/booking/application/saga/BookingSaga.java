@@ -1,6 +1,8 @@
 package com.example.hotelbooking.booking.application.saga;
 
+import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
 import lombok.Getter;
@@ -23,6 +25,8 @@ public final class BookingSaga {
 
   private final BookingSagaId id;
   private final UUID bookingId;
+  private final BigDecimal paymentAmount;
+  private final String paymentCurrency;
   private BookingSagaStatus status;
   private BookingSagaStep currentStep;
   private UUID paymentId;
@@ -38,6 +42,8 @@ public final class BookingSaga {
   private BookingSaga(
       BookingSagaId id,
       UUID bookingId,
+      BigDecimal paymentAmount,
+      String paymentCurrency,
       BookingSagaStatus status,
       BookingSagaStep currentStep,
       UUID paymentId,
@@ -51,6 +57,8 @@ public final class BookingSaga {
       Instant updatedAt) {
     this.id = Objects.requireNonNull(id, "id must not be null");
     this.bookingId = Objects.requireNonNull(bookingId, "bookingId must not be null");
+    this.paymentAmount = requirePositivePaymentAmount(paymentAmount);
+    this.paymentCurrency = normalizePaymentCurrency(paymentCurrency);
     this.status = Objects.requireNonNull(status, "status must not be null");
     this.currentStep = Objects.requireNonNull(currentStep, "currentStep must not be null");
     this.paymentId = paymentId;
@@ -66,12 +74,15 @@ public final class BookingSaga {
     validateState();
   }
 
-  public static BookingSaga start(UUID bookingId) {
+  public static BookingSaga start(
+      UUID bookingId, BigDecimal paymentAmount, String paymentCurrency) {
     Instant now = Instant.now();
 
     return new BookingSaga(
         BookingSagaId.newId(),
         bookingId,
+        paymentAmount,
+        paymentCurrency,
         BookingSagaStatus.STARTED,
         BookingSagaStep.HOLD_INVENTORY,
         null,
@@ -88,6 +99,8 @@ public final class BookingSaga {
   public static BookingSaga restore(
       BookingSagaId id,
       UUID bookingId,
+      BigDecimal paymentAmount,
+      String paymentCurrency,
       BookingSagaStatus status,
       BookingSagaStep currentStep,
       UUID paymentId,
@@ -102,6 +115,8 @@ public final class BookingSaga {
     return new BookingSaga(
         id,
         bookingId,
+        paymentAmount,
+        paymentCurrency,
         status,
         currentStep,
         paymentId,
@@ -271,6 +286,24 @@ public final class BookingSaga {
     return step == BookingSagaStep.CANCEL_PAYMENT
         || step == BookingSagaStep.RELEASE_INVENTORY
         || step == BookingSagaStep.CANCEL_BOOKING;
+  }
+
+  private BigDecimal requirePositivePaymentAmount(BigDecimal value) {
+    Objects.requireNonNull(value, "paymentAmount must not be null");
+
+    if (value.signum() <= 0) {
+      throw new BookingSagaStateException("paymentAmount must be positive");
+    }
+
+    return value;
+  }
+
+  private String normalizePaymentCurrency(String value) {
+    if (value == null || value.isBlank()) {
+      throw new BookingSagaStateException("paymentCurrency must not be blank");
+    }
+
+    return value.toUpperCase(Locale.ROOT);
   }
 
   private void validateState() {

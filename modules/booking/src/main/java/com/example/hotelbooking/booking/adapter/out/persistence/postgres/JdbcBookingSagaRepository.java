@@ -34,6 +34,8 @@ class JdbcBookingSagaRepository implements BookingSagaRepository {
             insert into booking_sagas (
                 id,
                 booking_id,
+                payment_amount,
+                payment_currency,
                 status,
                 current_step,
                 payment_id,
@@ -49,6 +51,8 @@ class JdbcBookingSagaRepository implements BookingSagaRepository {
             values (
                 :id,
                 :bookingId,
+                :paymentAmount,
+                :paymentCurrency,
                 :status,
                 :currentStep,
                 :paymentId,
@@ -63,6 +67,8 @@ class JdbcBookingSagaRepository implements BookingSagaRepository {
             )
             on conflict (id) do update
                set booking_id = excluded.booking_id,
+                   payment_amount = excluded.payment_amount,
+                   payment_currency = excluded.payment_currency,
                    status = excluded.status,
                    current_step = excluded.current_step,
                    payment_id = excluded.payment_id,
@@ -76,6 +82,8 @@ class JdbcBookingSagaRepository implements BookingSagaRepository {
             """)
         .param("id", saga.getId().value())
         .param("bookingId", saga.getBookingId())
+        .param("paymentAmount", saga.getPaymentAmount())
+        .param("paymentCurrency", saga.getPaymentCurrency())
         .param("status", saga.getStatus().name())
         .param("currentStep", saga.getCurrentStep().name())
         .param("paymentId", saga.getPaymentId())
@@ -99,6 +107,8 @@ class JdbcBookingSagaRepository implements BookingSagaRepository {
             """
             select id,
                    booking_id,
+                   payment_amount,
+                   payment_currency,
                    status,
                    current_step,
                    payment_id,
@@ -125,6 +135,8 @@ class JdbcBookingSagaRepository implements BookingSagaRepository {
             """
             select id,
                    booking_id,
+                   payment_amount,
+                   payment_currency,
                    status,
                    current_step,
                    payment_id,
@@ -151,6 +163,8 @@ class JdbcBookingSagaRepository implements BookingSagaRepository {
             """
             select id,
                    booking_id,
+                   payment_amount,
+                   payment_currency,
                    status,
                    current_step,
                    payment_id,
@@ -180,6 +194,8 @@ class JdbcBookingSagaRepository implements BookingSagaRepository {
     return BookingSaga.restore(
         new BookingSagaId(resultSet.getObject("id", UUID.class)),
         resultSet.getObject("booking_id", UUID.class),
+        resultSet.getBigDecimal("payment_amount"),
+        resultSet.getString("payment_currency"),
         BookingSagaStatus.valueOf(resultSet.getString("status")),
         BookingSagaStep.valueOf(resultSet.getString("current_step")),
         resultSet.getObject("payment_id", UUID.class),

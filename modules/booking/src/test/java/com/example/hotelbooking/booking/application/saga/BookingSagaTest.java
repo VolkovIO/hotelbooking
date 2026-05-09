@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,8 @@ class BookingSagaTest {
 
   private static final UUID BOOKING_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
   private static final UUID PAYMENT_ID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+  private static final BigDecimal PAYMENT_AMOUNT = new BigDecimal("100.00");
+  private static final String PAYMENT_CURRENCY = "RUB";
   private static final BookingSagaFailureReason PAYMENT_DECLINED_REASON =
       new BookingSagaFailureReason("payment declined");
   private static final BookingSagaFailureReason TECHNICAL_FAILURE_REASON =
@@ -21,9 +24,11 @@ class BookingSagaTest {
 
   @Test
   void shouldStartSagaWithHoldInventoryStep() {
-    BookingSaga saga = BookingSaga.start(BOOKING_ID);
+    BookingSaga saga = BookingSaga.start(BOOKING_ID, PAYMENT_AMOUNT, PAYMENT_CURRENCY);
 
     assertEquals(BOOKING_ID, saga.getBookingId());
+    assertEquals(PAYMENT_AMOUNT, saga.getPaymentAmount());
+    assertEquals(PAYMENT_CURRENCY, saga.getPaymentCurrency());
     assertEquals(BookingSagaStatus.STARTED, saga.getStatus());
     assertEquals(BookingSagaStep.HOLD_INVENTORY, saga.getCurrentStep());
     assertNull(saga.getPaymentId());
@@ -32,8 +37,22 @@ class BookingSagaTest {
   }
 
   @Test
+  void shouldNormalizePaymentCurrency() {
+    BookingSaga saga = BookingSaga.start(BOOKING_ID, PAYMENT_AMOUNT, "rub");
+
+    assertEquals("RUB", saga.getPaymentCurrency());
+  }
+
+  @Test
+  void shouldRejectNonPositivePaymentAmount() {
+    assertThrows(
+        BookingSagaStateException.class,
+        () -> BookingSaga.start(BOOKING_ID, BigDecimal.ZERO, PAYMENT_CURRENCY));
+  }
+
+  @Test
   void shouldMoveThroughHappyPath() {
-    BookingSaga saga = BookingSaga.start(BOOKING_ID);
+    BookingSaga saga = BookingSaga.start(BOOKING_ID, PAYMENT_AMOUNT, PAYMENT_CURRENCY);
 
     saga.markInventoryHeld();
     assertEquals(BookingSagaStatus.IN_PROGRESS, saga.getStatus());
@@ -55,7 +74,7 @@ class BookingSagaTest {
 
   @Test
   void shouldStartCompensationFromPaymentDeclined() {
-    BookingSaga saga = BookingSaga.start(BOOKING_ID);
+    BookingSaga saga = BookingSaga.start(BOOKING_ID, PAYMENT_AMOUNT, PAYMENT_CURRENCY);
 
     saga.markInventoryHeld();
     saga.markPaymentDeclined(PAYMENT_DECLINED_REASON);
@@ -67,7 +86,7 @@ class BookingSagaTest {
 
   @Test
   void shouldCompensateAfterPaymentWasAuthorized() {
-    BookingSaga saga = BookingSaga.start(BOOKING_ID);
+    BookingSaga saga = BookingSaga.start(BOOKING_ID, PAYMENT_AMOUNT, PAYMENT_CURRENCY);
 
     saga.markInventoryHeld();
     saga.markPaymentAuthorized(PAYMENT_ID);
@@ -91,7 +110,7 @@ class BookingSagaTest {
 
   @Test
   void shouldScheduleRetryWithoutLosingCurrentStep() {
-    BookingSaga saga = BookingSaga.start(BOOKING_ID);
+    BookingSaga saga = BookingSaga.start(BOOKING_ID, PAYMENT_AMOUNT, PAYMENT_CURRENCY);
     Instant nextAttemptAt = Instant.now().plusSeconds(30);
 
     saga.markInventoryHeld();
@@ -110,7 +129,7 @@ class BookingSagaTest {
 
   @Test
   void shouldResumeCompensationAfterRetry() {
-    BookingSaga saga = BookingSaga.start(BOOKING_ID);
+    BookingSaga saga = BookingSaga.start(BOOKING_ID, PAYMENT_AMOUNT, PAYMENT_CURRENCY);
     Instant nextAttemptAt = Instant.now().plusSeconds(30);
 
     saga.markInventoryHeld();
@@ -129,7 +148,7 @@ class BookingSagaTest {
 
   @Test
   void shouldRejectChangingFinishedSaga() {
-    BookingSaga saga = BookingSaga.start(BOOKING_ID);
+    BookingSaga saga = BookingSaga.start(BOOKING_ID, PAYMENT_AMOUNT, PAYMENT_CURRENCY);
 
     saga.markInventoryHeld();
     saga.markPaymentAuthorized(PAYMENT_ID);
@@ -142,7 +161,7 @@ class BookingSagaTest {
 
   @Test
   void shouldMarkSagaAsFailed() {
-    BookingSaga saga = BookingSaga.start(BOOKING_ID);
+    BookingSaga saga = BookingSaga.start(BOOKING_ID, PAYMENT_AMOUNT, PAYMENT_CURRENCY);
 
     saga.markFailed(TECHNICAL_FAILURE_REASON);
 
