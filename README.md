@@ -22,11 +22,13 @@ Main topics:
 - event-driven architecture
 - notification delivery flow
 - payment lifecycle modeling
+- orchestrated saga / process manager
+- retry and compensation flows
 - production-like technical debt tracking
 
 ## Current version
 
-Current project version: `0.9.0`
+Current project version: `0.10.0`
 
 Implemented milestones:
 
@@ -37,6 +39,7 @@ Implemented milestones:
 - `v0.7.0` Kafka booking event publication
 - `v0.8.0` notification service foundation
 - `v0.9.0` payment service foundation
+- `v0.10.0` booking saga orchestration
 
 ## Project structure
 
@@ -65,16 +68,19 @@ modules/payment
 
 ### Booking Service
 
-Booking Service owns booking state.
+Booking Service owns booking state and orchestrates the booking saga.
 
 Main responsibilities:
 
 - create booking
 - confirm booking
 - cancel booking
-- interact with Inventory Service through gRPC
+- start booking saga orchestration
+- coordinate Inventory Service through gRPC
+- coordinate Payment Service through HTTP client
 - persist booking lifecycle events into a transactional outbox
 - publish booking events to Kafka
+- schedule retry for retryable saga failures
 
 Storage:
 
@@ -83,6 +89,7 @@ Storage:
 Important integration points:
 
 - gRPC client to Inventory Service
+- HTTP client to Payment Service
 - Kafka producer for `booking.events`
 
 ### Inventory Service
@@ -93,7 +100,10 @@ Main responsibilities:
 
 - expose public hotel catalog APIs
 - manage inventory
-- handle booking hold/confirmation/cancellation commands through gRPC
+- place temporary inventory holds
+- confirm holds into reservations
+- release temporary holds
+- cancel confirmed reservations
 - protect internal gRPC communication with mTLS
 
 Storage:
@@ -103,6 +113,39 @@ Storage:
 Public catalog endpoints are accessible without user authentication.
 
 Admin endpoints are protected by local development security in the current version.
+
+### Payment Service
+
+Payment Service owns payment state.
+
+Current capabilities:
+
+- manages payment lifecycle
+- uses JPA/Hibernate persistence
+- uses Liquibase-managed PostgreSQL schema
+- exposes payment API
+- exposes Swagger UI for local testing
+- uses a fake payment provider
+- supports fake provider decline scenarios for saga testing
+- persists payment lifecycle events into a transactional outbox
+- publishes payment events to Kafka
+
+Storage:
+
+- PostgreSQL database `hotelbooking_payment`
+
+Important integration points:
+
+- Kafka producer for `payment.events`
+- HTTP API used by Booking Service saga process manager
+
+Payment lifecycle used by the saga:
+
+```text
+NEW -> AUTHORIZED -> APPROVED
+NEW -> DECLINED
+AUTHORIZED -> CANCELLED
+```
 
 ### Notification Service
 
@@ -128,30 +171,91 @@ Storage:
 
 Notification Service does not call real external providers yet. EMAIL, TELEGRAM and MAX senders currently write to logs only.
 
-### Payment Service
+## Booking saga orchestration
 
-Payment Service owns payment state.
+Starting from `v0.10.0`, Booking Service contains a simple explicit process manager for booking orchestration.
 
-Current capabilities:
+Endpoint:
 
-- manages payment lifecycle
-- uses JPA/Hibernate persistence
-- uses Liquibase-managed PostgreSQL schema
-- exposes payment API
-- exposes Swagger UI for local testing
-- uses a fake payment provider
-- persists payment lifecycle events into a transactional outbox
-- publishes payment events to Kafka
+```http
+POST /api/v1/bookings/saga
+```
 
-Storage:
+The saga coordinates:
 
-- PostgreSQL database `hotelbooking_payment`
+```text
+Booking Service -> Inventory Service -> Payment Service -> Booking Outbox -> Kafka -> Notification Service
+```
 
-Important integration points:
+Happy path:
 
-- Kafka producer for `payment.events`
+```text
+1. Create Booking
+2. Create BookingSaga
+3. Place inventory hold
+4. Mark Booking as ON_HOLD
+5. Authorize payment
+6. Confirm inventory hold
+7. Mark Booking as CONFIRMED
+8. Approve payment
+9. Mark BookingSaga as COMPLETED
+10. Publish BookingConfirmed to booking.events
+11. Notification Service creates confirmation notification
+```
 
-Payment Service is not yet orchestrated by Booking Service. Full booking-payment workflow coordination is planned for a later saga/process-manager milestone.
+Payment declined path:
+
+```text
+1. Create Booking
+2. Create BookingSaga
+3. Place inventory hold
+4. Mark Booking as ON_HOLD
+5. Authorize payment
+6. Payment Service returns DECLINED
+7. Release inventory hold
+8. Mark Booking as CANCELLED
+9. Mark BookingSaga as COMPENSATED
+10. Publish BookingCancelled to booking.events
+11. Notification Service creates cancellation notification
+```
+
+Retry path:
+
+```text
+1. Retryable technical failure happens during saga step execution
+2. BookingSaga is moved to WAITING_RETRY
+3. retryCount is incremented
+4. nextAttemptAt is set
+5. BookingSagaRetryScheduler later resumes the saga
+```
+
+The saga is intentionally handmade and explicit. It is not a workflow engine.
+
+## Why payment has two steps
+
+Payment is split into two stages:
+
+| Step | Meaning |
+|---|---|
+| `authorize` | Checks and reserves the ability to pay |
+| `approve` | Finalizes payment after inventory and booking are confirmed |
+
+This avoids final payment approval before the room is actually confirmed.
+
+If a later step fails after authorization, the saga can cancel the authorization instead of issuing a refund.
+
+## Why inventory has two steps
+
+Inventory is split into two stages:
+
+| Step | Meaning |
+|---|---|
+| `placeHold` | Temporarily holds the room while payment is being authorized |
+| `confirmHold` | Converts the temporary hold into a confirmed reservation |
+
+If payment is declined, the temporary hold is released.
+
+If inventory was already confirmed and a later step fails, the saga can cancel the confirmed reservation.
 
 ## Infrastructure
 
@@ -196,71 +300,56 @@ This setup keeps local development simpler while preserving service-level databa
 
 ### Booking Service
 
-Typical local profile:
+Typical local profiles:
 
 ```text
 local
-```
-
-Kafka-enabled local profile:
-
-```text
 local-kafka
-```
-
-JWT-enabled local profile:
-
-```text
 local-jwt
+local-jwt-kafka
 ```
 
-JWT and Kafka-enabled local profile:
+Expected profile groups include booking PostgreSQL support, local security where needed, Kafka publisher support, gRPC inventory client configuration and payment client configuration.
+
+Run Booking Service locally with Kafka support:
+
+```bash
+gradlew.bat :apps:booking-service-app:bootRun --args="--spring.profiles.active=local-jwt-kafka"
+```
+
+Swagger UI:
 
 ```text
-local-jwt-kafka
+http://localhost:8080/swagger-ui.html
 ```
 
 ### Inventory Service
 
-Typical local profile:
+Typical local profiles:
 
 ```text
 local
+security-dev
 ```
 
-Inventory Service uses local development security for admin operations.
+Inventory Service exposes public catalog APIs and internal gRPC APIs.
 
 ### Notification Service
 
 Typical local profile:
 
 ```text
-local
+local-kafka
 ```
 
-Expected profile group:
-
-- `notification-mongo`
-- `notification-kafka`
-- `notification-senders-logging`
-
-Run Notification Service locally:
-
-```bash
-gradlew.bat :apps:notification-service-app:bootRun --args="--spring.profiles.active=local"
-```
+Notification Service consumes `booking.events` and writes notification delivery attempts through logging adapters.
 
 ### Payment Service
 
-Typical local profile without Kafka publisher:
+Typical local profiles:
 
 ```text
 local
-```
-
-Kafka-enabled local profile:
-
-```text
 local-kafka
 ```
 
@@ -296,6 +385,18 @@ Swagger UI:
 http://localhost:8083/swagger-ui.html
 ```
 
+Fake provider decline configuration example:
+
+```yaml
+app:
+  payment:
+    provider:
+      fake:
+        enabled: true
+        always-decline: false
+        decline-amount-greater-than: 50000.00
+```
+
 ## Kafka
 
 Booking Service publishes booking lifecycle events to Kafka.
@@ -323,6 +424,112 @@ payment.events
 ```
 
 Kafka event publication is based on transactional outbox tables in the producing services.
+
+## Booking saga local verification
+
+Start infrastructure:
+
+```bash
+docker compose up -d
+```
+
+Start services:
+
+```bash
+gradlew.bat :apps:inventory-service-app:bootRun --args="--spring.profiles.active=local,security-dev"
+gradlew.bat :apps:payment-service-app:bootRun --args="--spring.profiles.active=local-kafka"
+gradlew.bat :apps:notification-service-app:bootRun --args="--spring.profiles.active=local-kafka"
+gradlew.bat :apps:booking-service-app:bootRun --args="--spring.profiles.active=local-jwt-kafka"
+```
+
+Start saga request:
+
+```http
+POST /api/v1/bookings/saga
+```
+
+Example happy path body:
+
+```json
+{
+  "hotelId": "10000000-0000-0000-0000-000000000001",
+  "roomTypeId": "20000000-0000-0000-0000-000000000001",
+  "checkIn": "2030-06-27",
+  "checkOut": "2030-06-28",
+  "guestCount": 1,
+  "paymentAmount": 3500,
+  "paymentCurrency": "RUB"
+}
+```
+
+Expected happy path result:
+
+```text
+booking.status = CONFIRMED
+booking_sagas.status = COMPLETED
+payment_payments.status = APPROVED
+booking.events contains BookingConfirmed
+notification-service sends Booking confirmed notification through logging adapter
+```
+
+Example payment declined body:
+
+```json
+{
+  "hotelId": "10000000-0000-0000-0000-000000000001",
+  "roomTypeId": "20000000-0000-0000-0000-000000000001",
+  "checkIn": "2030-06-28",
+  "checkOut": "2030-06-29",
+  "guestCount": 1,
+  "paymentAmount": 1500000,
+  "paymentCurrency": "RUB"
+}
+```
+
+Expected declined result:
+
+```text
+booking.status = CANCELLED
+booking_sagas.status = COMPENSATED
+payment_payments.status = DECLINED
+inventory hold is released
+booking.events contains BookingCancelled
+notification-service sends Booking cancelled notification through logging adapter
+```
+
+Check booking outbox:
+
+```sql
+select id,
+       event_type,
+       aggregate_id,
+       status,
+       attempts,
+       created_at,
+       published_at,
+       last_error
+from booking_outbox
+order by created_at desc
+limit 20;
+```
+
+Check saga state:
+
+```sql
+select id,
+       booking_id,
+       status,
+       current_step,
+       payment_id,
+       retry_count,
+       next_attempt_at,
+       last_failure_reason,
+       created_at,
+       updated_at
+from booking_sagas
+order by created_at desc
+limit 20;
+```
 
 ## Payment local verification
 
@@ -407,9 +614,10 @@ published_at is not null
 
 Project documentation:
 
-- [Security model](docs/security-model.md)
-- [Outbox](docs/outbox.md)
-- [Kafka](docs/kafka.md)
-- [Notification Service](docs/notification.md)
-- [Payment Service](docs/payment.md)
-- [Technical debt](docs/technical-debt.md)
+- `docs/security-model.md`
+- `docs/outbox.md`
+- `docs/kafka.md`
+- `docs/notification.md`
+- `docs/payment.md`
+- `docs/booking-saga.md`
+- `docs/technical-debt.md`

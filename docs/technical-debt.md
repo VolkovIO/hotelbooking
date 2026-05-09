@@ -8,7 +8,7 @@ The project is educational and is being developed step by step. Some technical d
 
 ## Current version
 
-Current project version: `0.9.0`
+Current project version: `0.10.0`
 
 Implemented milestones:
 
@@ -19,10 +19,11 @@ Implemented milestones:
 - `v0.7.0` Kafka booking event publication.
 - `v0.8.0` notification service foundation.
 - `v0.9.0` payment service foundation.
+- `v0.10.0` booking saga orchestration.
 
 ## Cross-service architecture
 
-### No full distributed transaction
+### No distributed ACID transaction
 
 The system intentionally does not use a distributed transaction across Booking Service, Inventory Service, Payment Service and Notification Service.
 
@@ -34,32 +35,60 @@ Current approach:
 - Notification Service owns notification state in MongoDB.
 - Kafka is used for asynchronous integration.
 - Outbox pattern is used for reliable event publication.
+- Booking Service coordinates booking creation through an explicit saga process manager.
 
-Future saga/process-manager work is planned for later milestones.
+This is intentional. The project demonstrates local transactions, compensation, retries and event-driven propagation instead of XA/distributed transactions.
 
-### No full saga yet
+### Handmade saga process manager
 
-Booking confirmation and payment authorization are not yet coordinated by an explicit saga/process manager.
+`v0.10.0` introduced a handmade booking saga process manager.
+
+Current capabilities:
+
+- stores saga state in `booking_sagas`
+- creates booking and saga state durably before external calls
+- places inventory hold
+- authorizes payment
+- confirms inventory hold
+- confirms booking
+- approves payment
+- compensates payment decline by releasing inventory hold and cancelling booking
+- publishes saga-driven booking changes through booking outbox
+- supports basic retry metadata and retry scheduler
+
+Current limitations:
+
+- this is not a workflow engine
+- no visual workflow runtime
+- no built-in long-running timer support beyond simple scheduler
+- no advanced workflow versioning
+- no operator UI for saga inspection or manual recovery
+
+Future improvement options:
+
+- keep handmade process manager and add operational tooling
+- compare with Spring Statemachine for state-machine clarity
+- compare with Temporal for durable workflow orchestration
+- compare with Camunda for BPMN/process visibility
+
+### Correlation and causation are still basic
+
+Booking and payment outbox events contain correlation and causation identifiers.
 
 Current limitation:
 
-- Booking Service can create and confirm bookings.
-- Payment Service can authorize, approve and cancel payments.
-- These flows are still manually tested as separate service capabilities.
-- Booking Service does not yet command Payment Service.
-- Payment events do not yet drive Booking Service state transitions.
+- correlation id is not consistently propagated from incoming HTTP requests
+- correlation id is not consistently propagated through gRPC calls
+- correlation id is not consistently propagated through payment HTTP calls
+- causation id is not fully connected across saga commands and emitted events
 
-Planned future work:
+Future improvements:
 
-- booking process manager
-- payment authorization step in booking workflow
-- inventory hold compensation on payment failure
-- payment cancellation compensation on booking cancellation
-- timeout handling
-- saga state persistence
-- correlation and causation propagation across services
-
-Target milestone: `v0.10.0`.
+- accept correlation id from incoming HTTP headers
+- store saga correlation id
+- propagate correlation id to Inventory Service and Payment Service
+- include correlation id in all outbox events caused by the saga
+- include trace ids in logs and event metadata
 
 ## Local infrastructure
 
@@ -93,6 +122,108 @@ Future production-like improvement:
 
 ## Booking Service
 
+### Saga retry handling is basic
+
+The saga has retry metadata and a retry scheduler.
+
+Current fields:
+
+- `status`
+- `current_step`
+- `retry_count`
+- `next_attempt_at`
+- `last_failure_reason`
+
+Current limitations:
+
+- retry policy is simple and fixed-delay based
+- no exponential backoff
+- no jitter
+- no per-step retry policy
+- no dead-letter state for sagas requiring operator action
+- no admin endpoint to inspect or resume stuck sagas
+- no operational dashboard
+
+Future improvements:
+
+- per-step retry configuration
+- exponential backoff with jitter
+- max total saga lifetime
+- manual retry endpoint for support/admin use
+- stuck saga alerting
+- structured failure classification
+
+### Payment approval unknown outcome is not reconciled
+
+A difficult production case remains unresolved.
+
+Example:
+
+```text
+Booking Service calls Payment Service approve(paymentId).
+Payment Service approves the payment.
+Booking Service loses the HTTP response due to timeout or network failure.
+```
+
+Current limitation:
+
+- Booking Service may not know whether payment approval succeeded.
+- Retrying or compensating blindly can be unsafe without stronger idempotency and reconciliation.
+
+Future improvements:
+
+- idempotent command keys for payment approve/cancel operations
+- payment operation status lookup
+- reconciliation job for unknown payment outcomes
+- explicit `UNKNOWN` or `PENDING_CONFIRMATION` handling for payment operations
+- stronger provider-side idempotency support
+
+### Cancellation after approved payment does not refund payment
+
+`v0.10.0` covers compensation during booking creation.
+
+It does not implement the separate business process of cancelling an already confirmed and approved booking.
+
+Current limitation:
+
+- if booking is successfully confirmed and payment is approved, later user cancellation does not refund payment
+- no refund lifecycle exists in Payment Service
+- no cancellation/refund saga exists yet
+
+Future improvements:
+
+- add refund domain model to Payment Service
+- add refund events
+- add cancellation/refund process manager
+- define cancellation policy and fees
+- integrate notification for refund status
+
+### Saga-driven booking changes must use outbox-aware persistence
+
+Saga-driven booking status changes must not use `BookingRepository.save(...)` directly.
+
+Correct boundary:
+
+```text
+BookingSagaProcessManager
+-> Booking aggregate state change
+-> BookingStateChangePersistenceService
+-> bookings + booking_outbox
+-> BookingOutboxPollingService
+-> Kafka booking.events
+```
+
+Current limitation:
+
+- this rule is architectural and should be protected by tests and review discipline
+- no automated architecture test enforces it yet
+
+Future improvements:
+
+- ArchUnit test to prevent direct booking state persistence from saga flows
+- helper methods around common saga booking state changes
+- stronger process manager tests verifying outbox persistence calls
+
 ### Outbox relay is still basic
 
 Booking Service publishes events from the transactional outbox.
@@ -104,6 +235,7 @@ Current limitations:
 - no admin endpoint for outbox inspection
 - no advanced alerting
 - no payload schema registry
+- Kafka client startup logs are noisy in local development
 
 Future improvements:
 
@@ -112,25 +244,30 @@ Future improvements:
 - operational dashboard
 - event schema evolution policy
 - replay tooling
+- tune Kafka client logging for local developer experience
 
-### Correlation and causation IDs are basic
+### Automatic inventory hold expiration is not implemented
 
-Booking outbox events currently contain:
+Inventory holds created during booking saga are temporary from a business perspective.
 
-- `correlationId`
-- `causationId`
+Current implementation:
+
+- Booking saga explicitly releases hold on payment decline or compensation.
+- There is no automatic hold expiration job yet.
 
 Current limitation:
 
-- `correlationId` is initially derived from event id in simple flows.
-- `causationId` is not fully propagated across all use cases.
+- if a process crashes or gets stuck before compensation, a hold may remain until manual cleanup or future recovery logic handles it
+- no `expiresAt` field is enforced for holds
+- no scheduled expired-hold release exists
 
 Future improvements:
 
-- propagate correlation id from incoming HTTP requests
-- propagate correlation id through gRPC calls
-- propagate correlation id through Kafka consumers and producers
-- use causation id when one event causes another event
+- add `expiresAt` to inventory holds
+- add scheduled expired hold release
+- make hold release idempotent
+- publish `InventoryHoldExpired` or equivalent event if needed
+- integrate expired hold handling with saga recovery
 
 ## Inventory Service
 
@@ -180,6 +317,23 @@ Future improvements:
 - certificate rotation
 - certificate expiration monitoring
 - stronger service identity model
+
+### gRPC retry/error classification is still simple
+
+Inventory communication is performed through gRPC.
+
+Current limitation:
+
+- not every gRPC status is classified into retryable and non-retryable categories
+- no per-method timeout/retry policy is documented at the adapter boundary
+- no circuit breaker is implemented
+
+Future improvements:
+
+- classify gRPC statuses explicitly
+- add deadlines/timeouts for all gRPC calls
+- consider Resilience4j circuit breaker and retry policies
+- expose metrics for inventory client failures
 
 ## Kafka
 
@@ -259,10 +413,6 @@ Preferred future approach:
 - Notification Service builds its own local read model.
 - Booking Service remains decoupled from notification delivery details.
 
-Booking Service should not call Notification Service to decide where to send notifications.
-
-Booking Service should only publish business events.
-
 ### One preference per user
 
 Current model supports one notification preference per user.
@@ -316,7 +466,12 @@ Current limitation:
 - no reconciliation
 - no provider-side idempotency keys beyond local fake behavior
 
-This is intentional for `v0.9.0`. The goal is to model the payment lifecycle and prepare for saga orchestration without depending on external payment infrastructure.
+Current fake provider supports local saga testing with:
+
+- `always-decline`
+- `decline-amount-greater-than`
+
+This is intentional. The goal is to model the payment lifecycle and prepare for saga orchestration without depending on external payment infrastructure.
 
 Future improvements:
 
@@ -360,26 +515,21 @@ Future improvements:
 - separate internal service API from external user API
 - use mTLS or service token for internal commands from Booking Service or saga orchestrator
 
-### Payment is not integrated with Booking Service yet
+### Payment is integrated with Booking Service only through synchronous saga commands
 
-Payment Service can be tested independently, but Booking Service does not use it yet.
+`v0.10.0` integrates Payment Service into Booking Service saga through direct HTTP commands.
 
 Current limitation:
 
-- booking can be confirmed without payment orchestration
-- payment events are published but not consumed by Booking Service
-- no compensation is triggered from payment failure
+- Booking Service commands Payment Service synchronously
+- Booking Service does not consume `payment.events` yet
+- payment events are currently useful for observability and future integrations, not for driving booking state transitions
 
-Planned future work:
+Future improvements:
 
-- booking process manager
-- inventory hold + payment authorization workflow
-- booking confirmation after successful payment
-- inventory release after payment decline
-- payment cancel after booking cancellation
-- timeout handling
-
-Target milestone: `v0.10.0`.
+- decide whether payment events should drive any asynchronous booking read model or reconciliation flow
+- propagate saga correlation id into payment events
+- add consumer-driven contract tests between Booking and Payment services
 
 ### Payment outbox relay is basic
 
@@ -481,19 +631,19 @@ Future improvements:
 
 ## Future release direction
 
-Planned next major milestone:
+Possible next milestones:
 
 ```text
-v0.10.0 booking-payment saga / process manager
+v0.10.x saga hardening and documentation cleanup
+v0.11.0 cancellation/refund process or observability hardening
 ```
 
-Expected topics:
+Candidate topics:
 
-- explicit saga state
-- booking payment orchestration
-- compensation logic
-- payment decline handling
-- inventory release on failed payment
-- event correlation propagation
-- timeout handling
-- retry policy
+- refund/cancellation saga after approved payment
+- inventory hold expiration
+- stronger saga retry and reconciliation
+- distributed tracing and correlation propagation
+- outbox metrics and DLQ strategy
+- contract tests between Booking, Inventory and Payment services
+- comparison with workflow engines such as Temporal or Camunda
