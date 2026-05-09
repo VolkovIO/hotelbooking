@@ -46,6 +46,8 @@ class BookingSagaProcessManagerTest {
   private static final BigDecimal PAYMENT_AMOUNT = new BigDecimal("3500.00");
   private static final String PAYMENT_CURRENCY = "RUB";
 
+  private BookingSagaRetryProperties retryProperties;
+
   @Mock private BookingSagaRepository sagaRepository;
   @Mock private BookingRepository bookingRepository;
   @Mock private BookingStateChangePersistenceService bookingStateChangePersistenceService;
@@ -56,13 +58,16 @@ class BookingSagaProcessManagerTest {
 
   @BeforeEach
   void setUp() {
+    retryProperties = new BookingSagaRetryProperties();
+
     processManager =
         new BookingSagaProcessManager(
             sagaRepository,
             bookingRepository,
             bookingStateChangePersistenceService,
             inventoryReservationPort,
-            paymentClient);
+            paymentClient,
+            retryProperties);
 
     when(sagaRepository.save(any(BookingSaga.class)))
         .thenAnswer(invocation -> invocation.getArgument(0));

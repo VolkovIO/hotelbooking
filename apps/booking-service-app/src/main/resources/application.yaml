@@ -80,3 +80,10 @@ app:
     payment-client:
       base-url: ${PAYMENT_SERVICE_BASE_URL:http://localhost:8083}
       response-timeout: ${PAYMENT_SERVICE_RESPONSE_TIMEOUT:5s}
+    saga:
+      retry:
+        enabled: true
+        max-retries: 3
+        batch-size: 20
+        delay: 10s
+        scheduler-fixed-delay-ms: 5000
