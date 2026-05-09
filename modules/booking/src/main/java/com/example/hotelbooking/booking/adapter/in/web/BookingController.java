@@ -3,14 +3,18 @@ package com.example.hotelbooking.booking.adapter.in.web;
 import com.example.hotelbooking.booking.application.command.CancelBookingCommand;
 import com.example.hotelbooking.booking.application.command.ConfirmBookingCommand;
 import com.example.hotelbooking.booking.application.command.CreateBookingCommand;
+import com.example.hotelbooking.booking.application.command.StartBookingSagaCommand;
 import com.example.hotelbooking.booking.application.port.in.CancelBookingUseCase;
 import com.example.hotelbooking.booking.application.port.in.ConfirmBookingUseCase;
 import com.example.hotelbooking.booking.application.port.in.CreateBookingUseCase;
 import com.example.hotelbooking.booking.application.port.in.GetBookingByIdUseCase;
+import com.example.hotelbooking.booking.application.port.in.StartBookingSagaUseCase;
 import com.example.hotelbooking.booking.application.query.GetBookingByIdQuery;
+import com.example.hotelbooking.booking.application.saga.BookingSaga;
 import com.example.hotelbooking.booking.application.security.CurrentUserProvider;
 import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.booking.domain.BookingId;
+import com.example.hotelbooking.booking.domain.StayPeriod;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -35,6 +39,7 @@ public class BookingController {
   private final GetBookingByIdUseCase getBookingByIdUseCase;
   private final CancelBookingUseCase cancelBookingUseCase;
   private final ConfirmBookingUseCase confirmBookingUseCase;
+  private final StartBookingSagaUseCase startBookingSagaUseCase;
 
   @Operation(
       summary = "Create booking",
@@ -115,5 +120,37 @@ public class BookingController {
                 BookingId.from(bookingId), currentUserProvider.currentUser().userId()));
 
     return BookingResponse.from(booking);
+  }
+
+  @Operation(
+      summary = "Start booking saga",
+      description =
+          """
+          Starts an orchestrated booking saga.
+
+          The saga creates a booking, places an inventory hold, authorizes payment,
+          confirms the booking, and approves the payment.
+
+          If payment is declined, the saga compensates the already completed steps:
+          inventory hold is released and the booking is cancelled.
+
+          This endpoint is intentionally separate from the legacy POST /api/v1/bookings endpoint
+          so the saga flow can be tested independently.
+          """)
+  @PostMapping("/saga")
+  @ResponseStatus(HttpStatus.CREATED)
+  public BookingSagaResponse startSaga(@Valid @RequestBody StartBookingSagaRequest request) {
+    BookingSaga saga =
+        startBookingSagaUseCase.execute(
+            new StartBookingSagaCommand(
+                currentUserProvider.currentUser().userId(),
+                request.hotelId(),
+                request.roomTypeId(),
+                new StayPeriod(request.checkIn(), request.checkOut()),
+                request.guestCount(),
+                request.paymentAmount(),
+                request.paymentCurrency()));
+
+    return BookingSagaResponse.from(saga);
   }
 }

@@ -1,5 +1,6 @@
 package com.example.hotelbooking.booking.application.saga;
 
+import com.example.hotelbooking.booking.application.event.BookingLifecycleEvent;
 import com.example.hotelbooking.booking.application.exception.BookingNotFoundException;
 import com.example.hotelbooking.booking.application.payment.PaymentAuthorizationRequest;
 import com.example.hotelbooking.booking.application.payment.PaymentResult;
@@ -8,9 +9,11 @@ import com.example.hotelbooking.booking.application.port.out.BookingRepository;
 import com.example.hotelbooking.booking.application.port.out.BookingSagaRepository;
 import com.example.hotelbooking.booking.application.port.out.InventoryReservationPort;
 import com.example.hotelbooking.booking.application.port.out.PaymentClient;
+import com.example.hotelbooking.booking.application.service.BookingStateChangePersistenceService;
 import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.booking.domain.BookingDomainException;
 import com.example.hotelbooking.booking.domain.BookingId;
+import com.example.hotelbooking.booking.domain.BookingStatus;
 import java.util.Objects;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -41,6 +44,7 @@ public class BookingSagaProcessManager {
 
   private final BookingSagaRepository sagaRepository;
   private final BookingRepository bookingRepository;
+  private final BookingStateChangePersistenceService bookingStateChangePersistenceService;
   private final InventoryReservationPort inventoryReservationPort;
   private final PaymentClient paymentClient;
 
@@ -124,7 +128,9 @@ public class BookingSagaProcessManager {
             ROOMS_PER_BOOKING);
 
     booking.placeOnHold(holdId);
-    bookingRepository.save(booking);
+
+    bookingStateChangePersistenceService.persist(
+        booking, BookingLifecycleEvent.placedOnHold(booking));
 
     saga.markInventoryHeld();
     sagaRepository.save(saga);
@@ -197,14 +203,17 @@ public class BookingSagaProcessManager {
       return sagaRepository.save(saga);
     }
 
-    UUID holdId = booking.getHoldId();
-    if (holdId == null) {
+    UUID confirmedHoldId = booking.getHoldId();
+    if (confirmedHoldId == null) {
       throw new BookingDomainException("Booking has no active hold to confirm");
     }
 
-    inventoryReservationPort.confirmHold(holdId);
+    inventoryReservationPort.confirmHold(confirmedHoldId);
+
     booking.confirmHeldBooking();
-    bookingRepository.save(booking);
+
+    bookingStateChangePersistenceService.persist(
+        booking, BookingLifecycleEvent.confirmed(booking, confirmedHoldId));
 
     saga.markBookingConfirmed();
     sagaRepository.save(saga);
@@ -277,35 +286,9 @@ public class BookingSagaProcessManager {
     Booking booking = loadBooking(saga);
 
     if (booking.isOnHold()) {
-      UUID holdId = booking.getHoldId();
-      if (holdId == null) {
-        throw new BookingDomainException("Booking has no active hold to release");
-      }
-
-      inventoryReservationPort.releaseHold(holdId);
-      booking.cancelHeldBooking();
-      bookingRepository.save(booking);
-
-      log.info(
-          "Inventory hold released by saga compensation: sagaId={}, bookingId={}, holdId={}",
-          saga.getId().value(),
-          booking.getId().value(),
-          holdId);
+      releaseHeldBookingInventory(saga, booking);
     } else if (booking.isConfirmed()) {
-      inventoryReservationPort.cancelConfirmedReservation(
-          booking.getHotelId(),
-          booking.getRoomTypeId(),
-          booking.getStayPeriod().checkIn(),
-          booking.getStayPeriod().checkOut(),
-          ROOMS_PER_BOOKING);
-
-      booking.cancelConfirmedBooking();
-      bookingRepository.save(booking);
-
-      log.info(
-          "Confirmed inventory reservation cancelled by saga compensation: sagaId={}, bookingId={}",
-          saga.getId().value(),
-          booking.getId().value());
+      cancelConfirmedBookingInventory(saga, booking);
     } else {
       log.debug(
           "Booking does not need inventory release: sagaId={}, bookingId={}, status={}",
@@ -318,6 +301,49 @@ public class BookingSagaProcessManager {
     sagaRepository.save(saga);
 
     return saga;
+  }
+
+  private void releaseHeldBookingInventory(BookingSaga saga, Booking booking) {
+    final BookingStatus previousStatus = booking.getStatus();
+    UUID holdId = booking.getHoldId();
+
+    if (holdId == null) {
+      throw new BookingDomainException("Booking has no active hold to release");
+    }
+
+    inventoryReservationPort.releaseHold(holdId);
+
+    booking.cancelHeldBooking();
+
+    bookingStateChangePersistenceService.persist(
+        booking, BookingLifecycleEvent.cancelled(booking, previousStatus));
+
+    log.info(
+        "Inventory hold released by saga compensation: sagaId={}, bookingId={}, holdId={}",
+        saga.getId().value(),
+        booking.getId().value(),
+        holdId);
+  }
+
+  private void cancelConfirmedBookingInventory(BookingSaga saga, Booking booking) {
+    final BookingStatus previousStatus = booking.getStatus();
+
+    inventoryReservationPort.cancelConfirmedReservation(
+        booking.getHotelId(),
+        booking.getRoomTypeId(),
+        booking.getStayPeriod().checkIn(),
+        booking.getStayPeriod().checkOut(),
+        ROOMS_PER_BOOKING);
+
+    booking.cancelConfirmedBooking();
+
+    bookingStateChangePersistenceService.persist(
+        booking, BookingLifecycleEvent.cancelled(booking, previousStatus));
+
+    log.info(
+        "Confirmed inventory reservation cancelled by saga compensation: sagaId={}, bookingId={}",
+        saga.getId().value(),
+        booking.getId().value());
   }
 
   /**
