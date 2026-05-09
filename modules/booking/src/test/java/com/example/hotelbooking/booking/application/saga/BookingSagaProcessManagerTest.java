@@ -1,6 +1,7 @@
 package com.example.hotelbooking.booking.application.saga;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -9,6 +10,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.example.hotelbooking.booking.application.payment.PaymentAuthorizationRequest;
+import com.example.hotelbooking.booking.application.payment.PaymentClientException;
 import com.example.hotelbooking.booking.application.payment.PaymentResult;
 import com.example.hotelbooking.booking.application.payment.PaymentStatus;
 import com.example.hotelbooking.booking.application.port.out.BookingRepository;
@@ -129,6 +131,71 @@ class BookingSagaProcessManagerTest {
     verify(inventoryReservationPort, never()).confirmHold(any(UUID.class));
     verify(paymentClient, never()).approve(any(UUID.class));
     verify(bookingStateChangePersistenceService, times(2)).persist(eq(booking), any());
+  }
+
+  @Test
+  void shouldScheduleRetryWhenPaymentAuthorizationFailsTechnically() {
+    Booking booking = newBooking();
+    BookingSaga saga = newSaga(booking);
+
+    when(sagaRepository.findById(saga.getId())).thenReturn(Optional.of(saga));
+    when(bookingRepository.findById(any(BookingId.class))).thenReturn(Optional.of(booking));
+    when(inventoryReservationPort.placeHold(
+            HOTEL_ID, ROOM_TYPE_ID, STAY_PERIOD.checkIn(), STAY_PERIOD.checkOut(), 1))
+        .thenReturn(HOLD_ID);
+    when(paymentClient.authorize(any(PaymentAuthorizationRequest.class)))
+        .thenThrow(new PaymentClientException("payment-service is unavailable"));
+
+    BookingSaga result = processManager.process(saga.getId());
+
+    assertEquals(BookingSagaStatus.WAITING_RETRY, result.getStatus());
+    assertEquals(BookingSagaStep.AUTHORIZE_PAYMENT, result.getCurrentStep());
+    assertEquals(1, result.getRetryCount());
+    assertNotNull(result.getNextAttemptAt());
+    assertEquals(BookingStatus.ON_HOLD, booking.getStatus());
+
+    verify(inventoryReservationPort)
+        .placeHold(HOTEL_ID, ROOM_TYPE_ID, STAY_PERIOD.checkIn(), STAY_PERIOD.checkOut(), 1);
+    verify(paymentClient).authorize(any(PaymentAuthorizationRequest.class));
+    verify(inventoryReservationPort, never()).confirmHold(any(UUID.class));
+    verify(inventoryReservationPort, never()).releaseHold(any(UUID.class));
+    verify(paymentClient, never()).approve(any(UUID.class));
+    verify(bookingStateChangePersistenceService).persist(eq(booking), any());
+  }
+
+  @Test
+  void shouldResumeWaitingRetrySagaAndCompleteWhenPaymentServiceRecovers() {
+    Booking booking = newBooking();
+    BookingSaga saga = newSaga(booking);
+
+    when(sagaRepository.findById(saga.getId())).thenReturn(Optional.of(saga));
+    when(bookingRepository.findById(any(BookingId.class))).thenReturn(Optional.of(booking));
+    when(inventoryReservationPort.placeHold(
+            HOTEL_ID, ROOM_TYPE_ID, STAY_PERIOD.checkIn(), STAY_PERIOD.checkOut(), 1))
+        .thenReturn(HOLD_ID);
+    when(paymentClient.authorize(any(PaymentAuthorizationRequest.class)))
+        .thenThrow(new PaymentClientException("payment-service is unavailable"));
+
+    BookingSaga waitingRetrySaga = processManager.process(saga.getId());
+
+    assertEquals(BookingSagaStatus.WAITING_RETRY, waitingRetrySaga.getStatus());
+    assertEquals(BookingSagaStep.AUTHORIZE_PAYMENT, waitingRetrySaga.getCurrentStep());
+
+    when(paymentClient.authorize(any(PaymentAuthorizationRequest.class)))
+        .thenReturn(authorizedPayment(booking));
+    when(paymentClient.approve(PAYMENT_ID)).thenReturn(approvedPayment(booking));
+
+    BookingSaga completedSaga = processManager.process(waitingRetrySaga.getId());
+
+    assertEquals(BookingSagaStatus.COMPLETED, completedSaga.getStatus());
+    assertEquals(BookingSagaStep.COMPLETE, completedSaga.getCurrentStep());
+    assertEquals(BookingStatus.CONFIRMED, booking.getStatus());
+
+    verify(inventoryReservationPort)
+        .placeHold(HOTEL_ID, ROOM_TYPE_ID, STAY_PERIOD.checkIn(), STAY_PERIOD.checkOut(), 1);
+    verify(paymentClient, times(2)).authorize(any(PaymentAuthorizationRequest.class));
+    verify(inventoryReservationPort).confirmHold(HOLD_ID);
+    verify(paymentClient).approve(PAYMENT_ID);
   }
 
   private Booking newBooking() {
