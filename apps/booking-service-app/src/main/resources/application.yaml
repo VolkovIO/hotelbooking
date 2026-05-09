@@ -77,3 +77,6 @@ app:
         partitions: ${BOOKING_EVENTS_TOPIC_PARTITIONS:3}
         replicas: ${BOOKING_EVENTS_TOPIC_REPLICAS:1}
         send-timeout: ${BOOKING_OUTBOX_KAFKA_SEND_TIMEOUT:PT10S}
+    payment-client:
+      base-url: ${PAYMENT_SERVICE_BASE_URL:http://localhost:8083}
+      response-timeout: ${PAYMENT_SERVICE_RESPONSE_TIMEOUT:5s}
