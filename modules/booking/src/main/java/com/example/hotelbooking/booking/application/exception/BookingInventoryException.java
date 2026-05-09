@@ -2,15 +2,15 @@ package com.example.hotelbooking.booking.application.exception;
 
 import java.io.Serial;
 
-public class RoomHoldFailedException extends BookingInventoryException {
+public abstract class BookingInventoryException extends RuntimeException {
 
   @Serial private static final long serialVersionUID = 1L;
 
-  public RoomHoldFailedException(String message, Throwable cause) {
+  protected BookingInventoryException(String message, Throwable cause) {
     super(message, cause);
   }
 
-  public RoomHoldFailedException(String message) {
+  protected BookingInventoryException(String message) {
     super(message);
   }
 }

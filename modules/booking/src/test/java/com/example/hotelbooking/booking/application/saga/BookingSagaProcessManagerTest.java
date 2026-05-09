@@ -174,16 +174,14 @@ class BookingSagaProcessManagerTest {
             HOTEL_ID, ROOM_TYPE_ID, STAY_PERIOD.checkIn(), STAY_PERIOD.checkOut(), 1))
         .thenReturn(HOLD_ID);
     when(paymentClient.authorize(any(PaymentAuthorizationRequest.class)))
-        .thenThrow(new PaymentClientException("payment-service is unavailable"));
+        .thenThrow(new PaymentClientException("payment-service is unavailable"))
+        .thenReturn(authorizedPayment(booking));
+    when(paymentClient.approve(PAYMENT_ID)).thenReturn(approvedPayment(booking));
 
     BookingSaga waitingRetrySaga = processManager.process(saga.getId());
 
     assertEquals(BookingSagaStatus.WAITING_RETRY, waitingRetrySaga.getStatus());
     assertEquals(BookingSagaStep.AUTHORIZE_PAYMENT, waitingRetrySaga.getCurrentStep());
-
-    when(paymentClient.authorize(any(PaymentAuthorizationRequest.class)))
-        .thenReturn(authorizedPayment(booking));
-    when(paymentClient.approve(PAYMENT_ID)).thenReturn(approvedPayment(booking));
 
     BookingSaga completedSaga = processManager.process(waitingRetrySaga.getId());
 

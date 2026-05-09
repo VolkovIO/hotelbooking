@@ -470,7 +470,15 @@ public class BookingSagaProcessManager {
   }
 
   private boolean shouldCompensateAfterRetriesExhausted(BookingSaga saga) {
-    return saga.getCurrentStep() != BookingSagaStep.HOLD_INVENTORY;
+    return !saga.isCompensating()
+        && !isCompensationStep(saga.getCurrentStep())
+        && saga.getCurrentStep() != BookingSagaStep.HOLD_INVENTORY;
+  }
+
+  private boolean isCompensationStep(BookingSagaStep step) {
+    return step == BookingSagaStep.CANCEL_PAYMENT
+        || step == BookingSagaStep.RELEASE_INVENTORY
+        || step == BookingSagaStep.CANCEL_BOOKING;
   }
 
   private boolean isNonRetryable(RuntimeException exception) {

@@ -46,10 +46,12 @@ final class GrpcInventoryReservationAdapter implements InventoryReservationPort 
                   .build());
 
       UUID holdId = UUID.fromString(response.getHoldId());
+
       log.debug("Inventory gRPC PlaceHold completed: holdId={}", holdId);
+
       return holdId;
     } catch (StatusRuntimeException exception) {
-      throw BookingInventoryGrpcExceptionMapper.inventoryCallFailed(
+      throw BookingInventoryGrpcExceptionMapper.mapFailure(
           "place room hold for hotel %s and room type %s".formatted(hotelId, roomTypeId),
           exception);
     }
@@ -65,7 +67,7 @@ final class GrpcInventoryReservationAdapter implements InventoryReservationPort 
 
       log.debug("Inventory gRPC ReleaseHold completed: holdId={}", holdId);
     } catch (StatusRuntimeException exception) {
-      throw BookingInventoryGrpcExceptionMapper.inventoryCallFailed(
+      throw BookingInventoryGrpcExceptionMapper.mapFailure(
           "release room hold: " + holdId, exception);
     }
   }
@@ -80,7 +82,7 @@ final class GrpcInventoryReservationAdapter implements InventoryReservationPort 
 
       log.debug("Inventory gRPC ConfirmHold completed: holdId={}", holdId);
     } catch (StatusRuntimeException exception) {
-      throw BookingInventoryGrpcExceptionMapper.inventoryCallFailed(
+      throw BookingInventoryGrpcExceptionMapper.mapFailure(
           "confirm room hold: " + holdId, exception);
     }
   }
@@ -116,7 +118,7 @@ final class GrpcInventoryReservationAdapter implements InventoryReservationPort 
           checkOut,
           rooms);
     } catch (StatusRuntimeException exception) {
-      throw BookingInventoryGrpcExceptionMapper.inventoryCallFailed(
+      throw BookingInventoryGrpcExceptionMapper.mapFailure(
           "cancel confirmed reservation for hotel %s and room type %s"
               .formatted(hotelId, roomTypeId),
           exception);
