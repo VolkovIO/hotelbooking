@@ -1,85 +1,135 @@
 # Booking Saga Orchestration
 
-## Overview
+Current milestone: `v0.11.0`.
 
-Booking service uses an orchestrated saga to coordinate the booking flow across several independent services:
+This document describes the booking saga flow and the two available orchestration implementations:
 
-- `booking-service`
-- `inventory-service`
-- `payment-service`
-- `notification-service` through Kafka booking events
+1. Handmade process manager.
+2. Spring Statemachine prototype.
 
-The saga is implemented as an explicit process manager inside `booking-service`.
+The default production-like flow is still the handmade process manager.
 
-The goal is to avoid distributed ACID transactions while keeping the process recoverable through local transactions, retries, idempotent operations, and compensation steps.
+## Why booking saga exists
 
-## Why saga is needed
+Booking creation touches multiple services and databases:
 
-The booking flow touches several bounded contexts and storages:
-
-| Responsibility | Owner | Storage |
+| Area | Service | Storage |
 |---|---|---|
-| Booking state | `booking-service` | PostgreSQL database `hotelbooking` |
-| Inventory hold / reservation | `inventory-service` | MongoDB |
-| Payment state | `payment-service` | PostgreSQL database `hotelbooking_payment` |
-| Notification preferences and delivery | `notification-service` | MongoDB database `hotelbooking_notification` |
+| Booking state | booking-service | PostgreSQL |
+| Inventory hold/reservation | inventory-service | MongoDB |
+| Payment state | payment-service | PostgreSQL |
+| Notification | notification-service | MongoDB |
 
-There is no distributed transaction across PostgreSQL, MongoDB, Kafka, and remote service calls.
+There is no distributed ACID transaction across all services.
 
-Instead, each service performs its own local transaction, and `booking-service` coordinates the overall process through a saga.
+The saga coordinates the process through local transactions, retryable steps, and compensation.
 
-## High-level flow
+## Endpoints
 
-The saga follows this idea:
+| Endpoint | Implementation | Availability |
+|---|---|---|
+| `POST /api/v1/bookings/saga` | Handmade process manager | default |
+| `POST /api/v1/bookings/saga-statemachine` | Spring Statemachine prototype | only with profile `booking-saga-springstatemachine-prototype` |
 
-1. Create local booking and saga state.
-2. Temporarily hold inventory.
-3. Authorize payment.
-4. Confirm the inventory hold.
-5. Confirm the booking.
-6. Approve payment.
-7. Publish booking events through the booking outbox.
-8. Notification service consumes booking events and sends notifications.
+## Shared saga actions
 
-The process is not a distributed 2PC transaction. It is a saga with explicit forward steps and explicit compensation steps.
+In `v0.11.0`, saga step logic was extracted into reusable action classes.
+
+Both implementations reuse these actions:
+
+- `HoldInventorySagaAction`
+- `AuthorizePaymentSagaAction`
+- `ConfirmBookingSagaAction`
+- `ApprovePaymentSagaAction`
+- `CancelPaymentSagaAction`
+- `ReleaseInventorySagaAction`
+- `CancelBookingSagaAction`
+
+This means the comparison focuses on orchestration style, not duplicated business logic.
+
+## Handmade process manager
+
+The handmade process manager is implemented by:
+
+```text
+BookingSagaProcessManager
+BookingSagaActionRegistry
+BookingSagaAction classes
+```
+
+It owns:
+
+- saga loop
+- current step execution
+- retry scheduling
+- compensation decision
+- exhausted retry handling
+
+The process manager reads the persisted saga state and executes the action for the current step.
 
 ```mermaid
 flowchart TD
-    A[Client calls POST /api/v1/bookings/saga] --> B[Create Booking]
-    B --> C[Create BookingSaga]
-    C --> D[Place inventory hold]
-    D --> E[Booking -> ON_HOLD]
-    E --> F[Authorize payment]
-    F -->|AUTHORIZED| G[Confirm inventory hold]
-    F -->|DECLINED| X[Release inventory hold]
-    G --> H[Booking -> CONFIRMED]
-    H --> I[Approve payment]
-    I --> J[BookingSaga -> COMPLETED]
-    X --> Y[Booking -> CANCELLED]
-    Y --> Z[BookingSaga -> COMPENSATED]
+    A[BookingSagaProcessManager] --> B[Load BookingSaga]
+    B --> C{Finished?}
+    C -- yes --> Z[Return saga]
+    C -- no --> D[BookingSagaActionRegistry]
+    D --> E[Execute action for currentStep]
+    E --> F{Retryable technical failure?}
+    F -- yes --> G[Schedule WAITING_RETRY]
+    F -- no --> H[Persist next saga state]
+    H --> C
+```
+
+## Spring Statemachine prototype
+
+The Spring Statemachine prototype is available only with profile:
+
+```text
+booking-saga-springstatemachine-prototype
+```
+
+Run example:
+
+```bash
+./gradlew :apps:booking-service-app:bootRun --args="--spring.profiles.active=local-kafka,booking-saga-springstatemachine-prototype"
+```
+
+Endpoint:
+
+```http
+POST /api/v1/bookings/saga-statemachine
+```
+
+The prototype uses:
+
+- states
+- transitions
+- actions
+- guards
+- a choice-state for payment authorization decision
+
+It is used for comparison and learning. It is not the default production-like flow.
+
+```mermaid
+stateDiagram-v2
+    [*] --> HOLD_INVENTORY
+    HOLD_INVENTORY --> AUTHORIZE_PAYMENT: NEXT / holdInventory
+    AUTHORIZE_PAYMENT --> PAYMENT_AUTHORIZATION_DECISION: NEXT / authorizePayment
+    PAYMENT_AUTHORIZATION_DECISION --> CONFIRM_BOOKING: payment authorized
+    PAYMENT_AUTHORIZATION_DECISION --> RELEASE_INVENTORY: payment declined
+    CONFIRM_BOOKING --> APPROVE_PAYMENT: NEXT / confirmBooking
+    APPROVE_PAYMENT --> COMPLETED: NEXT / approvePayment
+    RELEASE_INVENTORY --> CANCEL_BOOKING: NEXT / releaseInventory
+    CANCEL_BOOKING --> COMPENSATED: NEXT / cancelBooking
+    COMPLETED --> [*]
+    COMPENSATED --> [*]
 ```
 
 ## Happy path
 
-Successful booking creation uses two inventory steps and two payment steps.
-
-Inventory:
-
-| Step | Meaning |
-|---|---|
-| `placeHold` | Temporarily holds the room while payment is being checked |
-| `confirmHold` | Converts the temporary hold into a confirmed reservation |
-
-Payment:
-
-| Step | Meaning |
-|---|---|
-| `authorize` | Checks that payment can be made and reserves the ability to pay |
-| `approve` | Finalizes payment after inventory and booking are confirmed |
-
 ```mermaid
 sequenceDiagram
-    participant Client
+    actor Client
     participant Booking as booking-service
     participant Inventory as inventory-service
     participant Payment as payment-service
@@ -87,54 +137,45 @@ sequenceDiagram
     participant Notification as notification-service
 
     Client->>Booking: POST /api/v1/bookings/saga
-    Booking->>Booking: Create Booking
-    Booking->>Booking: Create BookingSaga
+    Booking->>Booking: Create Booking and BookingSaga
 
     Booking->>Inventory: placeHold(hotelId, roomTypeId, dates)
     Inventory-->>Booking: holdId
-
     Booking->>Booking: Booking -> ON_HOLD
-    Booking->>Booking: Persist Booking + BookingPlacedOnHold outbox event
-    Booking-->>Kafka: BookingPlacedOnHold
+    Booking->>Kafka: BookingPlacedOnHold
 
     Booking->>Payment: authorize(bookingId, userId, amount, currency)
-    Payment-->>Booking: AUTHORIZED + paymentId
+    Payment-->>Booking: AUTHORIZED
 
     Booking->>Inventory: confirmHold(holdId)
     Inventory-->>Booking: confirmed
 
     Booking->>Booking: Booking -> CONFIRMED
-    Booking->>Booking: Persist Booking + BookingConfirmed outbox event
-    Booking-->>Kafka: BookingConfirmed
+    Booking->>Kafka: BookingConfirmed
 
     Booking->>Payment: approve(paymentId)
     Payment-->>Booking: APPROVED
 
     Booking->>Booking: BookingSaga -> COMPLETED
     Kafka-->>Notification: BookingConfirmed
-    Notification->>Notification: Create notification
-    Notification->>Notification: Send booking confirmation notification
+    Notification->>Notification: Create and send confirmation notification
 ```
 
 Final state:
 
-| Entity | Final state |
+| Component | State |
 |---|---|
 | Booking | `CONFIRMED` |
 | BookingSaga | `COMPLETED` |
 | Payment | `APPROVED` |
 | Inventory | confirmed reservation |
-| Notification | booking confirmation notification created and sent |
+| Notification | confirmation notification sent |
 
 ## Payment declined compensation path
 
-If payment authorization is declined, this is a business outcome, not a technical error.
-
-The saga does not retry a declined payment. It compensates the already completed inventory hold.
-
 ```mermaid
 sequenceDiagram
-    participant Client
+    actor Client
     participant Booking as booking-service
     participant Inventory as inventory-service
     participant Payment as payment-service
@@ -142,15 +183,12 @@ sequenceDiagram
     participant Notification as notification-service
 
     Client->>Booking: POST /api/v1/bookings/saga
-    Booking->>Booking: Create Booking
-    Booking->>Booking: Create BookingSaga
+    Booking->>Booking: Create Booking and BookingSaga
 
     Booking->>Inventory: placeHold(hotelId, roomTypeId, dates)
     Inventory-->>Booking: holdId
-
     Booking->>Booking: Booking -> ON_HOLD
-    Booking->>Booking: Persist Booking + BookingPlacedOnHold outbox event
-    Booking-->>Kafka: BookingPlacedOnHold
+    Booking->>Kafka: BookingPlacedOnHold
 
     Booking->>Payment: authorize(bookingId, userId, amount, currency)
     Payment-->>Booking: DECLINED
@@ -159,153 +197,100 @@ sequenceDiagram
     Inventory-->>Booking: released
 
     Booking->>Booking: Booking -> CANCELLED
-    Booking->>Booking: Persist Booking + BookingCancelled outbox event
-    Booking-->>Kafka: BookingCancelled
+    Booking->>Kafka: BookingCancelled
 
     Booking->>Booking: BookingSaga -> COMPENSATED
     Kafka-->>Notification: BookingCancelled
-    Notification->>Notification: Create cancellation notification
-    Notification->>Notification: Send booking cancellation notification
+    Notification->>Notification: Create and send cancellation notification
 ```
 
 Final state:
 
-| Entity | Final state |
+| Component | State |
 |---|---|
 | Booking | `CANCELLED` |
 | BookingSaga | `COMPENSATED` |
 | Payment | `DECLINED` |
 | Inventory | hold released |
-| Notification | booking cancellation notification created and sent |
+| Notification | cancellation notification sent |
 
 ## Retry path
 
-The saga stores its current step and retry metadata in the `booking_sagas` table.
+Retry is implemented in the handmade process manager.
 
-Retry-related fields:
+Retry metadata is stored in `booking_sagas`:
 
 | Field | Meaning |
 |---|---|
 | `status` | Current saga status |
-| `current_step` | Step that should be executed or retried |
-| `retry_count` | Number of already scheduled retries |
-| `next_attempt_at` | Time when the saga can be retried |
+| `current_step` | Step to retry |
+| `retry_count` | Number of retries already scheduled |
+| `next_attempt_at` | When retry can run |
 
-When a retryable technical failure happens, the saga is moved to `WAITING_RETRY`.
+Retryable errors include:
 
-Examples of retryable failures:
-
-- `payment-service` temporarily unavailable
-- `inventory-service` temporarily unavailable
-- HTTP timeout
-- gRPC timeout
+- payment-service temporary unavailability
+- inventory-service temporary unavailability
+- HTTP/gRPC timeout
 - connection refused
 
-Examples of non-retryable outcomes:
+Business decisions are not retried:
 
-- payment declined by provider
-- invalid booking state
-- invalid domain transition
-- non-existing booking
-
-```mermaid
-sequenceDiagram
-    participant Booking as booking-service
-    participant Payment as payment-service
-    participant DB as booking_sagas table
-    participant Scheduler as BookingSagaRetryScheduler
-
-    Booking->>Payment: authorize(...)
-    Payment--xBooking: technical failure
-    Booking->>DB: status = WAITING_RETRY, current_step = AUTHORIZE_PAYMENT, retry_count + 1
-
-    Scheduler->>DB: findReadyForRetry(now, batchSize)
-    DB-->>Scheduler: saga ready for retry
-    Scheduler->>Booking: process(sagaId)
-    Booking->>Booking: resumeAfterRetry()
-    Booking->>Payment: authorize(...)
-    Payment-->>Booking: AUTHORIZED
-    Booking->>DB: continue saga
-```
-
-## Saga state machine
+- payment declined
+- invalid inventory request
+- domain invariant violation
 
 ```mermaid
 stateDiagram-v2
     [*] --> STARTED
-
-    STARTED --> IN_PROGRESS: first successful forward step
+    STARTED --> IN_PROGRESS: first step executed
     IN_PROGRESS --> WAITING_RETRY: retryable technical failure
-    WAITING_RETRY --> IN_PROGRESS: retry forward step
-    WAITING_RETRY --> COMPENSATING: retry compensation step
-
+    WAITING_RETRY --> IN_PROGRESS: scheduler resumes forward step
+    WAITING_RETRY --> COMPENSATING: scheduler resumes compensation step
+    IN_PROGRESS --> COMPENSATING: payment declined / compensation needed
     IN_PROGRESS --> COMPLETED: all forward steps succeeded
-    IN_PROGRESS --> COMPENSATING: payment declined or compensation required
-
     COMPENSATING --> WAITING_RETRY: retryable compensation failure
     COMPENSATING --> COMPENSATED: compensation completed
-
     IN_PROGRESS --> FAILED: non-retryable failure
-    WAITING_RETRY --> FAILED: retries exhausted before compensation is possible
+    WAITING_RETRY --> FAILED: retries exhausted before compensation
     COMPENSATING --> FAILED: compensation retries exhausted
-
-    COMPLETED --> [*]
-    COMPENSATED --> [*]
-    FAILED --> [*]
 ```
-
-## Booking saga steps
-
-| Step | Description |
-|---|---|
-| `HOLD_INVENTORY` | Places a temporary hold in `inventory-service` |
-| `AUTHORIZE_PAYMENT` | Asks `payment-service` to authorize payment |
-| `CONFIRM_BOOKING` | Confirms inventory hold and marks booking as confirmed |
-| `APPROVE_PAYMENT` | Finalizes approved payment |
-| `CANCEL_PAYMENT` | Cancels authorized payment during compensation |
-| `RELEASE_INVENTORY` | Releases temporary hold or cancels confirmed reservation |
-| `CANCEL_BOOKING` | Finalizes booking compensation |
-| `COMPLETE` | Terminal saga step |
 
 ## Why payment has two steps
 
-Payment is split into two stages:
+Payment is split into two operations:
 
 | Step | Meaning |
 |---|---|
-| `authorize` | Checks and reserves the ability to pay |
-| `approve` | Finalizes payment after inventory and booking are confirmed |
+| `authorize` | Check and reserve ability to pay |
+| `approve` | Finalize payment after booking/inventory confirmation |
 
-This reduces the risk of taking money before the room is actually confirmed.
+This prevents final payment approval before the room is confirmed.
 
-If a later step fails after authorization, the saga can cancel the authorization instead of issuing a refund.
-
-In the current implementation payment provider is fake, but the split is intentionally production-like.
+If later steps fail after authorization but before approval, the saga can cancel the authorization instead of issuing a refund.
 
 ## Why inventory has two steps
 
-Inventory is also split into two stages:
+Inventory is split into two operations:
 
 | Step | Meaning |
 |---|---|
-| `placeHold` | Temporarily holds the room while payment is being authorized |
-| `confirmHold` | Converts the temporary hold into a confirmed reservation |
+| `placeHold` | Temporarily hold room while payment is authorized |
+| `confirmHold` | Convert hold into confirmed reservation |
 
-If payment is declined, the temporary hold is released with `releaseHold`.
+If payment is declined, the saga calls `releaseHold`.
 
-If inventory was already confirmed and a later step fails, the saga uses a stronger compensation operation: `cancelConfirmedReservation`.
+If a reservation is already confirmed and a later step fails, the saga uses `cancelConfirmedReservation`.
 
 ## Booking outbox integration
 
-Saga-driven booking state changes must go through the booking outbox-aware persistence boundary.
-
-The saga must not update booking state through `BookingRepository.save(...)` directly when booking status changes.
+Saga-driven booking state changes must use the outbox-aware persistence boundary.
 
 Correct flow:
 
 ```mermaid
 flowchart LR
-    A[BookingSagaProcessManager] --> B[Booking aggregate state change]
+    A[Saga action] --> B[Booking aggregate state change]
     B --> C[BookingStateChangePersistenceService]
     C --> D[(bookings)]
     C --> E[(booking_outbox)]
@@ -314,90 +299,69 @@ flowchart LR
     G --> H[notification-service]
 ```
 
-This ensures that saga-driven booking changes publish the same events as regular booking use cases.
-
-Examples:
-
-| Booking state change | Outbox event |
-|---|---|
-| Booking becomes `ON_HOLD` | `BookingPlacedOnHold` |
-| Booking becomes `CONFIRMED` | `BookingConfirmed` |
-| Booking becomes `CANCELLED` | `BookingCancelled` |
-
-`notification-service` currently ignores unsupported intermediate events such as `BookingPlacedOnHold`, but creates notifications for supported business events such as `BookingConfirmed` and `BookingCancelled`.
-
-## Error classification
-
-The booking saga separates business outcomes from technical failures.
-
-| Situation | Type | Saga behavior |
-|---|---|---|
-| Payment provider returns `DECLINED` | business outcome | compensate immediately |
-| Inventory says room is not available | business failure | fail or compensate depending on current progress |
-| Payment service is unavailable | retryable technical failure | schedule retry |
-| Inventory service is unavailable | retryable technical failure | schedule retry |
-| Domain invariant violation | programming/domain error | fail fast |
-
-This avoids retrying known business decisions while still allowing recovery from temporary infrastructure failures.
+This ensures that saga-driven state changes produce the same booking events as regular booking use cases.
 
 ## Manual verification
 
-### Happy path
+### Handmade happy path
 
-1. Start PostgreSQL, MongoDB, Kafka, `booking-service`, `inventory-service`, `payment-service`, and `notification-service`.
-2. Send request to `POST /api/v1/bookings/saga` with payment amount below fake provider decline threshold.
-3. Verify:
-   - booking status is `CONFIRMED`
-   - saga status is `COMPLETED`
-   - payment status is `APPROVED`
-   - `BookingPlacedOnHold` and `BookingConfirmed` are written to `booking_outbox`
-   - `BookingConfirmed` is published to Kafka topic `booking.events`
-   - `notification-service` creates and sends booking confirmation notification
+Endpoint:
 
-### Payment declined path
+```http
+POST /api/v1/bookings/saga
+```
 
-1. Configure fake payment provider decline threshold.
-2. Send request to `POST /api/v1/bookings/saga` with payment amount above threshold.
-3. Verify:
-   - booking status is `CANCELLED`
-   - saga status is `COMPENSATED`
-   - payment status is `DECLINED`
-   - inventory hold is released
-   - `BookingPlacedOnHold` and `BookingCancelled` are written to `booking_outbox`
-   - `BookingCancelled` is published to Kafka topic `booking.events`
-   - `notification-service` creates and sends booking cancellation notification
+Use payment amount below fake provider decline threshold.
 
-### Retry path
+Expected:
 
-1. Stop `payment-service` or `inventory-service`.
-2. Send request to `POST /api/v1/bookings/saga`.
-3. Verify that saga moves to `WAITING_RETRY`.
-4. Start the unavailable service again.
-5. Wait for `BookingSagaRetryScheduler`.
-6. Verify that saga resumes from the stored `current_step`.
+- booking `CONFIRMED`
+- saga `COMPLETED`
+- payment `APPROVED`
+- `BookingConfirmed` event
+- confirmation notification sent
+
+### Handmade declined path
+
+Endpoint:
+
+```http
+POST /api/v1/bookings/saga
+```
+
+Use payment amount above fake provider decline threshold.
+
+Expected:
+
+- booking `CANCELLED`
+- saga `COMPENSATED`
+- payment `DECLINED`
+- inventory hold released
+- `BookingCancelled` event
+- cancellation notification sent
+
+### Spring Statemachine prototype
+
+Start with profile:
+
+```bash
+./gradlew :apps:booking-service-app:bootRun --args="--spring.profiles.active=local-kafka,booking-saga-springstatemachine-prototype"
+```
+
+Endpoint:
+
+```http
+POST /api/v1/bookings/saga-statemachine
+```
+
+Both happy path and declined path should produce the same business result as the handmade saga.
 
 ## Current limitations
 
-The current implementation is intentionally simple and educational.
-
-Known limitations:
-
-- automatic inventory hold expiration is not implemented yet
-- cancellation after approved payment does not refund payment yet
-- payment approval unknown outcome is not reconciled yet
-- saga is a handmade process manager, not a workflow engine
-- retry handling is basic and should be hardened before production use
-- no distributed tracing across booking, inventory, payment, and notification services yet
-- compensation failure requires operator attention after retries are exhausted
-
-## Future improvements
-
-Potential next improvements:
-
-- add automatic inventory hold expiration
-- add refund or reversal process for cancellation after approved payment
-- add stronger idempotency keys for every external saga step
-- add reconciliation job for unknown payment approval outcomes
-- add metrics for saga status, retry count, compensation count, and failure count
-- add distributed tracing correlation across services
-- compare handmade process manager with workflow engines such as Temporal, Camunda, or Spring Statemachine
+- Spring Statemachine prototype is not the default flow.
+- Spring Statemachine prototype is used for comparison and learning.
+- Temporal is documented as a production-grade alternative but not implemented in code.
+- Automatic inventory hold expiration is not implemented yet.
+- Cancellation after already approved payment does not refund payment yet.
+- Payment approval unknown outcome reconciliation is not implemented yet.
+- Distributed tracing is not implemented yet.
