@@ -4,8 +4,10 @@ import static com.example.hotelbooking.booking.application.saga.springstatemachi
 
 import com.example.hotelbooking.booking.application.port.out.BookingSagaRepository;
 import com.example.hotelbooking.booking.application.saga.BookingSaga;
+import com.example.hotelbooking.booking.application.saga.BookingSagaFailureReason;
 import com.example.hotelbooking.booking.application.saga.BookingSagaId;
 import com.example.hotelbooking.booking.application.saga.BookingSagaNotFoundException;
+import com.example.hotelbooking.booking.application.saga.BookingSagaStatus;
 import com.example.hotelbooking.booking.application.saga.BookingSagaStep;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +24,8 @@ import reactor.core.publisher.Mono;
 @Profile("booking-saga-springstatemachine-prototype")
 @RequiredArgsConstructor
 public class SpringStatemachineBookingSagaService {
+
+  private static final int MAX_TRANSITIONS_PER_RUN = 20;
 
   private final BookingSagaRepository sagaRepository;
   private final StateMachineFactory<
@@ -44,7 +48,21 @@ public class SpringStatemachineBookingSagaService {
 
     stateMachine.startReactively().block();
 
+    int executedTransitions = 0;
+
     while (!saga.isFinished() && saga.getCurrentStep() != BookingSagaStep.COMPLETE) {
+      if (executedTransitions >= MAX_TRANSITIONS_PER_RUN) {
+        markFailed(
+            saga,
+            "Spring Statemachine prototype exceeded maximum transitions per run: sagaId="
+                + saga.getId().value());
+
+        break;
+      }
+
+      SpringStatemachineBookingSagaState stateBefore = stateMachine.getState().getId();
+      BookingSagaStep stepBefore = saga.getCurrentStep();
+      BookingSagaStatus statusBefore = saga.getStatus();
 
       stateMachine
           .sendEvent(
@@ -53,6 +71,24 @@ public class SpringStatemachineBookingSagaService {
                       .setHeader(SpringStatemachineBookingSagaContext.KEY, saga)
                       .build()))
           .blockLast();
+
+      if (!saga.isFinished()
+          && stateMachine.getState().getId() == stateBefore
+          && saga.getCurrentStep() == stepBefore
+          && saga.getStatus() == statusBefore) {
+        markFailed(
+            saga,
+            "Spring Statemachine prototype did not make progress: sagaId="
+                + saga.getId().value()
+                + ", state="
+                + stateBefore
+                + ", step="
+                + stepBefore);
+
+        break;
+      }
+
+      executedTransitions++;
     }
 
     stateMachine.stopReactively().block();
@@ -65,5 +101,17 @@ public class SpringStatemachineBookingSagaService {
         saga.getCurrentStep());
 
     return saga;
+  }
+
+  private void markFailed(BookingSaga saga, String reason) {
+    saga.markFailed(new BookingSagaFailureReason(reason));
+    sagaRepository.save(saga);
+
+    log.warn(
+        "Spring Statemachine booking saga prototype failed: sagaId={}, bookingId={}, currentStep={}, reason={}",
+        saga.getId().value(),
+        saga.getBookingId(),
+        saga.getCurrentStep(),
+        reason);
   }
 }

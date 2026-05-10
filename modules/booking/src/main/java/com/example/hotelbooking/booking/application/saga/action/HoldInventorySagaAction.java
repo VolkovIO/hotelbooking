@@ -1,12 +1,15 @@
 package com.example.hotelbooking.booking.application.saga.action;
 
 import com.example.hotelbooking.booking.application.event.BookingLifecycleEvent;
+import com.example.hotelbooking.booking.application.exception.RoomHoldFailedException;
+import com.example.hotelbooking.booking.application.port.out.BookingRepository;
 import com.example.hotelbooking.booking.application.port.out.BookingSagaRepository;
 import com.example.hotelbooking.booking.application.port.out.InventoryReservationPort;
 import com.example.hotelbooking.booking.application.saga.BookingSaga;
 import com.example.hotelbooking.booking.application.saga.BookingSagaStep;
 import com.example.hotelbooking.booking.application.service.BookingStateChangePersistenceService;
 import com.example.hotelbooking.booking.domain.Booking;
+import com.example.hotelbooking.booking.domain.BookingStatus;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +23,7 @@ public class HoldInventorySagaAction implements BookingSagaAction {
   private static final int ROOMS_PER_BOOKING = 1;
 
   private final BookingSagaRepository sagaRepository;
+  private final BookingRepository bookingRepository;
   private final BookingSagaBookingLoader bookingLoader;
   private final InventoryReservationPort inventoryReservationPort;
   private final BookingStateChangePersistenceService bookingStateChangePersistenceService;
@@ -42,13 +46,7 @@ public class HoldInventorySagaAction implements BookingSagaAction {
       return sagaRepository.save(saga);
     }
 
-    UUID holdId =
-        inventoryReservationPort.placeHold(
-            booking.getHotelId(),
-            booking.getRoomTypeId(),
-            booking.getStayPeriod().checkIn(),
-            booking.getStayPeriod().checkOut(),
-            ROOMS_PER_BOOKING);
+    UUID holdId = placeInventoryHold(saga, booking);
 
     booking.placeOnHold(holdId);
 
@@ -65,5 +63,50 @@ public class HoldInventorySagaAction implements BookingSagaAction {
         holdId);
 
     return saga;
+  }
+
+  private UUID placeInventoryHold(BookingSaga saga, Booking booking) {
+    try {
+      return inventoryReservationPort.placeHold(
+          booking.getHotelId(),
+          booking.getRoomTypeId(),
+          booking.getStayPeriod().checkIn(),
+          booking.getStayPeriod().checkOut(),
+          ROOMS_PER_BOOKING);
+    } catch (RoomHoldFailedException exception) {
+      rejectBookingBeforeHold(saga, booking, exception);
+      throw exception;
+    }
+  }
+
+  private void rejectBookingBeforeHold(
+      BookingSaga saga, Booking booking, RoomHoldFailedException exception) {
+    if (booking.getStatus() != BookingStatus.NEW) {
+      return;
+    }
+
+    booking.reject();
+    bookingRepository.save(booking);
+
+    log.info(
+        "Booking rejected because inventory hold could not be placed: sagaId={}, bookingId={}, reason={}",
+        saga.getId().value(),
+        booking.getId().value(),
+        failureMessage(exception));
+  }
+
+  private String failureMessage(RuntimeException exception) {
+    String message = exception.getMessage();
+
+    if (message == null || message.isBlank()) {
+      message = exception.getClass().getSimpleName();
+    }
+
+    Throwable cause = exception.getCause();
+    if (cause == null || cause.getMessage() == null || cause.getMessage().isBlank()) {
+      return message;
+    }
+
+    return message + ": " + cause.getMessage();
   }
 }

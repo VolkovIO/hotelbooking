@@ -79,6 +79,7 @@ class BookingSagaProcessManagerTest {
             List.of(
                 new HoldInventorySagaAction(
                     sagaRepository,
+                    bookingRepository,
                     bookingLoader,
                     inventoryReservationPort,
                     bookingStateChangePersistenceService),

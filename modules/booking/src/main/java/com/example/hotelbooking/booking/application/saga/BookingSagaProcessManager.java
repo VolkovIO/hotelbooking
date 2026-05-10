@@ -1,9 +1,11 @@
 package com.example.hotelbooking.booking.application.saga;
 
 import com.example.hotelbooking.booking.application.exception.InventoryReservationException;
+import com.example.hotelbooking.booking.application.exception.RoomHoldFailedException;
 import com.example.hotelbooking.booking.application.payment.PaymentClientException;
 import com.example.hotelbooking.booking.application.port.out.BookingSagaRepository;
 import com.example.hotelbooking.booking.application.saga.action.BookingSagaActionRegistry;
+import com.example.hotelbooking.booking.domain.BookingDomainException;
 import java.time.Instant;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +15,7 @@ import org.springframework.stereotype.Service;
 @Slf4j
 @Service
 @RequiredArgsConstructor
+@SuppressWarnings("PMD.CyclomaticComplexity")
 public class BookingSagaProcessManager {
 
   private static final int MAX_STEPS_PER_RUN = 20;
@@ -55,6 +58,9 @@ public class BookingSagaProcessManager {
         if (saga.isWaitingRetry() || saga.isFinished()) {
           return saga;
         }
+      } catch (RoomHoldFailedException | BookingDomainException exception) {
+        markNonRetryableStepFailure(saga, exception);
+        return saga;
       }
 
       executedSteps++;
@@ -124,6 +130,22 @@ public class BookingSagaProcessManager {
         exception);
   }
 
+  private void markNonRetryableStepFailure(BookingSaga saga, RuntimeException exception) {
+    BookingSagaFailureReason reason = failureReason(exception);
+
+    saga.markFailed(reason);
+    sagaRepository.save(saga);
+
+    log.warn(
+        "Booking saga step failed without retry: "
+            + "sagaId={}, bookingId={}, currentStep={}, errorType={}, reason={}",
+        saga.getId().value(),
+        saga.getBookingId(),
+        saga.getCurrentStep(),
+        exception.getClass().getSimpleName(),
+        reason.value());
+  }
+
   private boolean canRetry(BookingSaga saga) {
     return retryProperties.isEnabled() && saga.getRetryCount() < retryProperties.getMaxRetries();
   }
@@ -147,6 +169,11 @@ public class BookingSagaProcessManager {
       message = exception.getClass().getSimpleName();
     }
 
-    return new BookingSagaFailureReason(message);
+    Throwable cause = exception.getCause();
+    if (cause == null || cause.getMessage() == null || cause.getMessage().isBlank()) {
+      return new BookingSagaFailureReason(message);
+    }
+
+    return new BookingSagaFailureReason(message + ": " + cause.getMessage());
   }
 }
