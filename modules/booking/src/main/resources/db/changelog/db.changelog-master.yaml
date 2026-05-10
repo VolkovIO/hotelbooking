@@ -7,3 +7,7 @@ databaseChangeLog:
       file: db/changelog/changes/003-create-booking-outbox-table.yaml
   - include:
       file: db/changelog/changes/004-add-outbox-correlation-metadata.yaml
+  - include:
+      file: db/changelog/changes/005-create-booking-sagas-table.yaml
+  - include:
+      file: db/changelog/changes/006-add-payment-details-to-booking-sagas-table.yaml

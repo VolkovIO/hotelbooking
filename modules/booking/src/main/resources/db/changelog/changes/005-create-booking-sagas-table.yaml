@@ -1,0 +1,95 @@
+databaseChangeLog:
+  - changeSet:
+      id: 005-create-booking-sagas-table
+      author: volkovself
+      changes:
+        - createTable:
+            tableName: booking_sagas
+            columns:
+              - column:
+                  name: id
+                  type: uuid
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+
+              - column:
+                  name: booking_id
+                  type: uuid
+                  constraints:
+                    nullable: false
+                    unique: true
+                    uniqueConstraintName: uq_booking_sagas_booking_id
+
+              - column:
+                  name: status
+                  type: varchar(64)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: current_step
+                  type: varchar(64)
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: payment_id
+                  type: uuid
+
+              - column:
+                  name: last_failure_reason
+                  type: varchar(1000)
+
+              - column:
+                  name: retry_count
+                  type: int
+                  defaultValueNumeric: 0
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: next_attempt_at
+                  type: timestamp
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: created_at
+                  type: timestamp
+                  constraints:
+                    nullable: false
+
+              - column:
+                  name: completed_at
+                  type: timestamp
+
+              - column:
+                  name: compensated_at
+                  type: timestamp
+
+              - column:
+                  name: failed_at
+                  type: timestamp
+
+              - column:
+                  name: updated_at
+                  type: timestamp
+                  constraints:
+                    nullable: false
+
+        - createIndex:
+            tableName: booking_sagas
+            indexName: ix_booking_sagas_status_next_attempt_at
+            columns:
+              - column:
+                  name: status
+              - column:
+                  name: next_attempt_at
+
+        - createIndex:
+            tableName: booking_sagas
+            indexName: ix_booking_sagas_booking_id
+            columns:
+              - column:
+                  name: booking_id

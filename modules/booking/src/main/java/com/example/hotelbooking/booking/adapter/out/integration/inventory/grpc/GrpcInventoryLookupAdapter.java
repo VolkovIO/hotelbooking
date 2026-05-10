@@ -58,9 +58,21 @@ final class GrpcInventoryLookupAdapter implements InventoryLookupPort {
               UUID.fromString(roomType.getRoomTypeId()),
               roomType.getGuestCapacity()));
     } catch (StatusRuntimeException exception) {
-      throw BookingInventoryGrpcExceptionMapper.inventoryCallFailed(
-          "find room type reference for hotel %s and room type %s".formatted(hotelId, roomTypeId),
-          exception);
+      String operation =
+          "find room type reference for hotel %s and room type %s".formatted(hotelId, roomTypeId);
+
+      if (BookingInventoryGrpcExceptionMapper.isBusinessFailure(exception)) {
+        log.debug(
+            "Inventory gRPC FindRoomTypeReference completed with business failure: "
+                + "hotelId={}, roomTypeId={}, status={}",
+            hotelId,
+            roomTypeId,
+            exception.getStatus().getCode());
+
+        return Optional.empty();
+      }
+
+      throw BookingInventoryGrpcExceptionMapper.technicalFailure(operation, exception);
     }
   }
 }

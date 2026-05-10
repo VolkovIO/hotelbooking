@@ -27,7 +27,6 @@ public class BookingOutboxPollingService {
         bookingOutboxRepository.claimBatchForProcessing(batchSize, Instant.now(), lockedBy);
 
     if (messages.isEmpty()) {
-      log.debug("No booking outbox messages available for publishing");
       return 0;
     }
 
