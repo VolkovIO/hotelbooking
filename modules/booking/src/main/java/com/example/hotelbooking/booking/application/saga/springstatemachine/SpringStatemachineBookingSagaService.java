@@ -1,8 +1,6 @@
 package com.example.hotelbooking.booking.application.saga.springstatemachine;
 
-import static com.example.hotelbooking.booking.application.saga.springstatemachine.SpringStatemachineBookingSagaEvent.COMPENSATE;
 import static com.example.hotelbooking.booking.application.saga.springstatemachine.SpringStatemachineBookingSagaEvent.NEXT;
-import static com.example.hotelbooking.booking.application.saga.springstatemachine.SpringStatemachineBookingSagaState.AUTHORIZE_PAYMENT;
 
 import com.example.hotelbooking.booking.application.port.out.BookingSagaRepository;
 import com.example.hotelbooking.booking.application.saga.BookingSaga;
@@ -47,12 +45,11 @@ public class SpringStatemachineBookingSagaService {
     stateMachine.startReactively().block();
 
     while (!saga.isFinished() && saga.getCurrentStep() != BookingSagaStep.COMPLETE) {
-      SpringStatemachineBookingSagaEvent event = nextEvent(saga, stateMachine);
 
       stateMachine
           .sendEvent(
               Mono.just(
-                  MessageBuilder.withPayload(event)
+                  MessageBuilder.withPayload(NEXT)
                       .setHeader(SpringStatemachineBookingSagaContext.KEY, saga)
                       .build()))
           .blockLast();
@@ -68,17 +65,5 @@ public class SpringStatemachineBookingSagaService {
         saga.getCurrentStep());
 
     return saga;
-  }
-
-  private SpringStatemachineBookingSagaEvent nextEvent(
-      BookingSaga saga,
-      StateMachine<SpringStatemachineBookingSagaState, SpringStatemachineBookingSagaEvent>
-          stateMachine) {
-    if (stateMachine.getState().getId() == AUTHORIZE_PAYMENT
-        && saga.getCurrentStep() == BookingSagaStep.RELEASE_INVENTORY) {
-      return COMPENSATE;
-    }
-
-    return NEXT;
   }
 }

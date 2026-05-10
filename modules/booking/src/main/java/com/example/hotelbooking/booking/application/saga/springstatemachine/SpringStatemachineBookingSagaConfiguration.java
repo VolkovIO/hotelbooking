@@ -1,6 +1,5 @@
 package com.example.hotelbooking.booking.application.saga.springstatemachine;
 
-import static com.example.hotelbooking.booking.application.saga.springstatemachine.SpringStatemachineBookingSagaEvent.COMPENSATE;
 import static com.example.hotelbooking.booking.application.saga.springstatemachine.SpringStatemachineBookingSagaEvent.FAIL;
 import static com.example.hotelbooking.booking.application.saga.springstatemachine.SpringStatemachineBookingSagaEvent.NEXT;
 import static com.example.hotelbooking.booking.application.saga.springstatemachine.SpringStatemachineBookingSagaState.APPROVE_PAYMENT;
@@ -12,6 +11,7 @@ import static com.example.hotelbooking.booking.application.saga.springstatemachi
 import static com.example.hotelbooking.booking.application.saga.springstatemachine.SpringStatemachineBookingSagaState.CONFIRM_BOOKING;
 import static com.example.hotelbooking.booking.application.saga.springstatemachine.SpringStatemachineBookingSagaState.FAILED;
 import static com.example.hotelbooking.booking.application.saga.springstatemachine.SpringStatemachineBookingSagaState.HOLD_INVENTORY;
+import static com.example.hotelbooking.booking.application.saga.springstatemachine.SpringStatemachineBookingSagaState.PAYMENT_AUTHORIZATION_DECISION;
 import static com.example.hotelbooking.booking.application.saga.springstatemachine.SpringStatemachineBookingSagaState.RELEASE_INVENTORY;
 
 import java.util.EnumSet;
@@ -44,6 +44,7 @@ class SpringStatemachineBookingSagaConfiguration
         .withStates()
         .initial(HOLD_INVENTORY)
         .states(EnumSet.allOf(SpringStatemachineBookingSagaState.class))
+        .choice(PAYMENT_AUTHORIZATION_DECISION)
         .end(COMPLETED)
         .end(COMPENSATED)
         .end(FAILED);
@@ -64,17 +65,14 @@ class SpringStatemachineBookingSagaConfiguration
         .and()
         .withExternal()
         .source(AUTHORIZE_PAYMENT)
-        .target(CONFIRM_BOOKING)
+        .target(PAYMENT_AUTHORIZATION_DECISION)
         .event(NEXT)
         .action(actions.authorizePayment())
-        .guard(actions.paymentAuthorized())
         .and()
-        .withExternal()
-        .source(AUTHORIZE_PAYMENT)
-        .target(RELEASE_INVENTORY)
-        .event(COMPENSATE)
-        .action(actions.authorizePayment())
-        .guard(actions.paymentDeclined())
+        .withChoice()
+        .source(PAYMENT_AUTHORIZATION_DECISION)
+        .first(CONFIRM_BOOKING, actions.paymentAuthorized())
+        .last(RELEASE_INVENTORY)
         .and()
         .withExternal()
         .source(CONFIRM_BOOKING)
