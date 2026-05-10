@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
-class BookingSagaBookingLoader {
+public class BookingSagaBookingLoader {
 
   private final BookingRepository bookingRepository;
 

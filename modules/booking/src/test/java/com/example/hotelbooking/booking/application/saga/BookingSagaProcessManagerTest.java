@@ -17,6 +17,15 @@ import com.example.hotelbooking.booking.application.port.out.BookingRepository;
 import com.example.hotelbooking.booking.application.port.out.BookingSagaRepository;
 import com.example.hotelbooking.booking.application.port.out.InventoryReservationPort;
 import com.example.hotelbooking.booking.application.port.out.PaymentClient;
+import com.example.hotelbooking.booking.application.saga.action.ApprovePaymentSagaAction;
+import com.example.hotelbooking.booking.application.saga.action.AuthorizePaymentSagaAction;
+import com.example.hotelbooking.booking.application.saga.action.BookingSagaActionRegistry;
+import com.example.hotelbooking.booking.application.saga.action.BookingSagaBookingLoader;
+import com.example.hotelbooking.booking.application.saga.action.CancelBookingSagaAction;
+import com.example.hotelbooking.booking.application.saga.action.CancelPaymentSagaAction;
+import com.example.hotelbooking.booking.application.saga.action.ConfirmBookingSagaAction;
+import com.example.hotelbooking.booking.application.saga.action.HoldInventorySagaAction;
+import com.example.hotelbooking.booking.application.saga.action.ReleaseInventorySagaAction;
 import com.example.hotelbooking.booking.application.service.BookingStateChangePersistenceService;
 import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.booking.domain.BookingId;
@@ -25,6 +34,7 @@ import com.example.hotelbooking.booking.domain.StayPeriod;
 import com.example.hotelbooking.booking.domain.UserId;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -62,14 +72,32 @@ class BookingSagaProcessManagerTest {
   void setUp() {
     retryProperties = new BookingSagaRetryProperties();
 
-    processManager =
-        new BookingSagaProcessManager(
-            sagaRepository,
-            bookingRepository,
-            bookingStateChangePersistenceService,
-            inventoryReservationPort,
-            paymentClient,
-            retryProperties);
+    BookingSagaBookingLoader bookingLoader = new BookingSagaBookingLoader(bookingRepository);
+
+    BookingSagaActionRegistry actionRegistry =
+        new BookingSagaActionRegistry(
+            List.of(
+                new HoldInventorySagaAction(
+                    sagaRepository,
+                    bookingLoader,
+                    inventoryReservationPort,
+                    bookingStateChangePersistenceService),
+                new AuthorizePaymentSagaAction(sagaRepository, bookingLoader, paymentClient),
+                new ConfirmBookingSagaAction(
+                    sagaRepository,
+                    bookingLoader,
+                    inventoryReservationPort,
+                    bookingStateChangePersistenceService),
+                new ApprovePaymentSagaAction(sagaRepository, paymentClient),
+                new CancelPaymentSagaAction(sagaRepository, paymentClient),
+                new ReleaseInventorySagaAction(
+                    sagaRepository,
+                    bookingLoader,
+                    inventoryReservationPort,
+                    bookingStateChangePersistenceService),
+                new CancelBookingSagaAction(sagaRepository)));
+
+    processManager = new BookingSagaProcessManager(sagaRepository, actionRegistry, retryProperties);
 
     when(sagaRepository.save(any(BookingSaga.class)))
         .thenAnswer(invocation -> invocation.getArgument(0));
