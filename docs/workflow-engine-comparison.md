@@ -1,299 +1,289 @@
-# Workflow Engine Comparison
+# Saga Orchestration Approaches Comparison
 
-## Context
+Current milestone: `v0.11.0`.
 
-`v0.10.0` introduced a handmade orchestrated saga for booking creation.
+The project compares two implemented booking saga orchestration styles and one documented production-grade alternative.
 
-The current production flow is implemented by `BookingSagaProcessManager` and durable saga state stored in the `booking_sagas` table.
+Implemented:
 
-`v0.11.0` keeps the handmade saga as the main implementation and prepares the project for comparison with workflow/state-machine approaches.
+1. Handmade process manager.
+2. Spring Statemachine prototype.
 
-The goal is not to replace working code immediately. The goal is to understand the trade-offs between:
+Documented but not implemented:
 
-- a handmade process manager;
-- Spring Statemachine;
-- Temporal.
+3. Temporal.
 
-## Current implementation: handmade booking saga
+## Why compare approaches
 
-The current booking saga coordinates the following process:
+The booking saga coordinates several services:
 
-1. create booking and booking saga;
-2. place inventory hold;
-3. mark booking as `ON_HOLD`;
-4. authorize payment;
-5. confirm inventory hold;
-6. mark booking as `CONFIRMED`;
-7. approve payment;
-8. mark saga as `COMPLETED`.
+- booking-service
+- inventory-service
+- payment-service
+- notification-service through Kafka events
 
-If payment authorization is declined, the saga compensates the already completed inventory hold:
+The flow includes:
 
-1. release inventory hold;
-2. cancel booking;
-3. publish `BookingCancelled` through the booking outbox;
-4. mark saga as `COMPENSATED`.
+- forward steps
+- compensation
+- retry
+- event publication
+- user notification
 
-Technical failures can move the saga to `WAITING_RETRY`. The retry scheduler later resumes the saga from the persisted `current_step`.
+This makes it a good learning case for comparing orchestration styles.
 
-## Handmade process manager
+## Shared action design
 
-### How it works
+Before adding Spring Statemachine, saga step logic was extracted into action classes:
 
-The handmade process manager is explicit Java orchestration code.
+- `HoldInventorySagaAction`
+- `AuthorizePaymentSagaAction`
+- `ConfirmBookingSagaAction`
+- `ApprovePaymentSagaAction`
+- `CancelPaymentSagaAction`
+- `ReleaseInventorySagaAction`
+- `CancelBookingSagaAction`
 
-It owns:
+This allows multiple orchestrators to reuse the same business step implementation.
 
-- step selection;
-- retry handling;
-- compensation decisions;
-- saga persistence;
-- transition between technical saga states.
+```mermaid
+flowchart TD
+    A[Handmade process manager] --> X[Shared saga actions]
+    B[Spring Statemachine prototype] --> X[Shared saga actions]
+    X --> C[InventoryReservationPort]
+    X --> D[PaymentClient]
+    X --> E[BookingStateChangePersistenceService]
+    X --> F[BookingSagaRepository]
+```
 
-After `v0.11.0` refactoring, step execution is delegated to reusable saga action classes.
+## Approach 1: Handmade process manager
 
-The target shape is:
+Default endpoint:
 
-- `BookingSagaProcessManager` controls orchestration and retry loop;
-- `BookingSagaActionRegistry` resolves action by `BookingSagaStep`;
-- action classes execute concrete business/integration work.
+```http
+POST /api/v1/bookings/saga
+```
 
-Example actions:
+Main classes:
 
-- `HoldInventorySagaAction`;
-- `AuthorizePaymentSagaAction`;
-- `ConfirmBookingSagaAction`;
-- `ApprovePaymentSagaAction`;
-- `CancelPaymentSagaAction`;
-- `ReleaseInventorySagaAction`;
-- `CancelBookingSagaAction`.
+```text
+BookingSagaProcessManager
+BookingSagaActionRegistry
+BookingSagaAction classes
+BookingSagaRetryScheduler
+```
+
+The handmade process manager explicitly controls:
+
+- loading saga state
+- executing current step
+- retry handling
+- compensation decision
+- exhausted retry behavior
+- terminal state handling
+
+Simplified model:
+
+```mermaid
+flowchart TD
+    A[Load BookingSaga] --> B{currentStep}
+    B --> C[Find action by step]
+    C --> D[Execute action]
+    D --> E{success?}
+    E -- yes --> F[Persist next state]
+    F --> G{terminal?}
+    G -- no --> B
+    G -- yes --> H[Return result]
+    E -- retryable failure --> I[WAITING_RETRY]
+    E -- compensation needed --> J[COMPENSATING]
+    E -- fatal --> K[FAILED]
+```
 
 ### Strengths
 
-- Very explicit.
-- Easy to debug step by step.
-- No additional infrastructure.
-- Good for learning distributed transaction boundaries.
-- Easy to show in code review and interviews.
-- Failure and compensation logic is visible in application code.
+- Very explicit and easy to debug.
+- No additional orchestration framework.
+- Retry/compensation code is visible.
+- Good for learning distributed transaction replacement.
+- Easy to explain transaction boundaries.
 
 ### Weaknesses
 
-- Workflow logic is implemented manually.
-- Retry and timeout handling must be maintained by the application.
-- Long-running workflow visibility is limited.
-- Harder to evolve if flows become more complex.
+- Flow is implemented in Java code.
+- More custom logic to maintain.
+- Complex workflows may become harder to visualize.
 - No built-in workflow history UI.
-- No built-in durable timers beyond what the application implements.
+- No built-in timers/retry DSL.
 
-### Good fit
+## Approach 2: Spring Statemachine prototype
 
-This approach is a good fit when:
+Prototype endpoint:
 
-- the process is relatively small;
-- the team wants full control;
-- external workflow infrastructure would be too heavy;
-- the goal is learning and making transaction boundaries explicit.
+```http
+POST /api/v1/bookings/saga-statemachine
+```
 
-## Spring Statemachine
+Required profile:
 
-### How it would work
+```text
+booking-saga-springstatemachine-prototype
+```
 
-Spring Statemachine can model the booking saga as states, events, transitions, guards, and actions.
+Main package:
 
-In this project, it would not replace the domain model or integration ports. It would replace part of the handmade step-selection logic.
+```text
+com.example.hotelbooking.booking.application.saga.springstatemachine
+```
 
-The current `BookingSagaAction` classes can be reused as transition actions.
+The prototype uses:
 
-Possible state machine states:
+- states
+- transitions
+- events
+- guards
+- actions
+- choice-state
 
-- `STARTED`;
-- `HOLDING_INVENTORY`;
-- `AUTHORIZING_PAYMENT`;
-- `CONFIRMING_BOOKING`;
-- `APPROVING_PAYMENT`;
-- `COMPENSATING`;
-- `COMPLETED`;
-- `COMPENSATED`;
-- `FAILED`.
+Simplified state model:
 
-Possible events:
-
-- `START`;
-- `INVENTORY_HELD`;
-- `PAYMENT_AUTHORIZED`;
-- `PAYMENT_DECLINED`;
-- `BOOKING_CONFIRMED`;
-- `PAYMENT_APPROVED`;
-- `TECHNICAL_FAILURE`;
-- `RETRY`;
-- `COMPENSATION_COMPLETED`.
+```mermaid
+stateDiagram-v2
+    [*] --> HOLD_INVENTORY
+    HOLD_INVENTORY --> AUTHORIZE_PAYMENT: NEXT
+    AUTHORIZE_PAYMENT --> PAYMENT_AUTHORIZATION_DECISION: NEXT
+    PAYMENT_AUTHORIZATION_DECISION --> CONFIRM_BOOKING: authorized
+    PAYMENT_AUTHORIZATION_DECISION --> RELEASE_INVENTORY: declined
+    CONFIRM_BOOKING --> APPROVE_PAYMENT: NEXT
+    APPROVE_PAYMENT --> COMPLETED: NEXT
+    RELEASE_INVENTORY --> CANCEL_BOOKING: NEXT
+    CANCEL_BOOKING --> COMPENSATED: NEXT
+    COMPLETED --> [*]
+    COMPENSATED --> [*]
+```
 
 ### Strengths
 
-- Flow is expressed as states and transitions.
-- Guards and actions are first-class concepts.
-- Good for visualizing state transition logic.
-- Runs inside the Spring application.
-- No separate workflow server is required.
-- Useful as a comparison step after handmade saga.
+- Flow structure is visible as states and transitions.
+- Guards and choice-states make branching explicit.
+- Shared actions avoid duplicating business logic.
+- Useful for comparing orchestration styles.
+- Good fit for medium-complexity stateful flows inside Spring.
 
 ### Weaknesses
 
-- Not a full durable workflow platform by itself.
-- Persistence, retry, scheduling, and recovery still need careful design.
-- Can add abstraction without solving distributed workflow durability completely.
-- Debugging may become harder if the state machine configuration is more complex than the original code.
+- Adds framework complexity.
+- Guards/actions order can be non-obvious.
+- State machine does not automatically solve durable workflow history.
+- Retry/durability still require explicit persistence strategy.
+- More difficult to debug than a simple Java loop for small workflows.
 
-### Good fit
+### Important lesson from implementation
 
-Spring Statemachine is a good fit when:
+A direct guarded transition from `AUTHORIZE_PAYMENT` to `CONFIRM_BOOKING` did not work as expected because guards are evaluated before transition actions.
 
-- the main complexity is state transition logic;
-- the workflow remains inside one application;
-- the team wants a structured state machine abstraction;
-- full workflow infrastructure is not needed yet.
+The fix was to introduce a choice-state:
 
-### Suggested role in this project
+```text
+AUTHORIZE_PAYMENT
+  -> action authorizePayment
+  -> PAYMENT_AUTHORIZATION_DECISION
+       -> CONFIRM_BOOKING if authorized
+       -> RELEASE_INVENTORY if declined
+```
 
-For `v0.11.0`, Spring Statemachine should be added only as a disabled prototype profile.
+This is a useful interview point: framework semantics matter.
 
-Recommended profile:
+## Approach 3: Temporal
 
-- `booking-saga-statemachine-prototype`
+Temporal is not implemented in code in `v0.11.0`.
 
-The default production-like flow should remain the handmade saga.
+It is documented as a production-grade workflow alternative.
 
-## Temporal
+Temporal would introduce:
 
-### How it would work
+- workflow definitions
+- activities
+- workers
+- durable execution history
+- built-in retry policies
+- timers
+- workflow visibility
+- separate workflow runtime infrastructure
 
-Temporal would model the booking process as a durable workflow.
+Possible Temporal model:
 
-The workflow would contain orchestration logic. Calls to inventory-service, payment-service, and booking persistence would be represented as activities.
-
-Possible activities:
-
-- `PlaceInventoryHoldActivity`;
-- `AuthorizePaymentActivity`;
-- `ConfirmInventoryHoldActivity`;
-- `ConfirmBookingActivity`;
-- `ApprovePaymentActivity`;
-- `CancelPaymentActivity`;
-- `ReleaseInventoryActivity`;
-- `CancelBookingActivity`.
-
-Temporal would require additional runtime concepts:
-
-- Temporal service;
-- worker process;
-- task queue;
-- workflow implementation;
-- activity implementation;
-- workflow client.
+```text
+BookingWorkflow
+  -> HoldInventoryActivity
+  -> AuthorizePaymentActivity
+  -> ConfirmInventoryActivity
+  -> ConfirmBookingActivity
+  -> ApprovePaymentActivity
+  -> Compensation activities on failure
+```
 
 ### Strengths
 
 - Durable workflow execution.
-- Workflow history.
-- Built-in retry policies.
-- Built-in timers and timeouts.
-- Better support for long-running processes.
-- Stronger operational visibility for workflow execution.
-- Worker crash/restart recovery model.
+- Built-in history and visibility.
+- Strong retry/timer support.
+- Better for long-running business processes.
+- Worker/activity model separates workflow from side effects.
 
 ### Weaknesses
 
-- Requires additional infrastructure.
-- Requires a different programming model.
-- Activities must be designed to be idempotent.
-- Adds operational and local-development complexity.
-- Too heavy if the only goal is a small internal state machine.
-
-### Good fit
-
-Temporal is a good fit when:
-
-- workflows are long-running;
-- retries and timeouts are central to the business process;
-- workflow history and visibility are important;
-- multiple services participate in a durable business process;
-- the team is ready to operate workflow infrastructure.
-
-### Suggested role in this project
-
-Temporal should not be added directly in `v0.11.0` unless the goal changes.
-
-For now, the best approach is:
-
-- document how the current saga maps to Temporal workflows and activities;
-- keep handmade saga as the working baseline;
-- add Spring Statemachine prototype first;
-- consider Temporal later as a separate milestone or branch.
+- Requires Temporal server/dev server.
+- Requires workers.
+- Introduces a different programming model.
+- More infrastructure to run locally and in production.
+- Too much for the current educational milestone.
 
 ## Comparison table
 
-| Criterion | Handmade process manager | Spring Statemachine | Temporal |
+| Feature | Handmade process manager | Spring Statemachine prototype | Temporal |
 |---|---|---|---|
-| Additional infrastructure | No | No | Yes |
-| Flow visibility | Java code | State machine config | Workflow history/UI |
-| Durable execution | Implemented manually | Needs explicit design | Built in |
-| Retry model | Implemented manually | Needs explicit design | Built in through retry policies |
-| Timers/timeouts | Implemented manually | Limited / app-managed | Built in |
-| Compensation logic | Java code | Transition/actions | Workflow code/activities |
-| Learning value | Very high | High | Very high but heavier |
-| Operational complexity | Low | Medium | High |
-| Best use in this project | Main baseline | Prototype comparison | Future milestone/comparison |
+| Implemented in project | yes | yes, prototype | no |
+| Default booking flow | yes | no | no |
+| Requires extra infrastructure | no | no | yes |
+| Uses shared saga actions | yes | yes | would use activities instead |
+| Durable saga state | yes, via `booking_sagas` | yes, via existing saga state | yes, workflow history |
+| Built-in retry engine | no | limited/no | yes |
+| Visual workflow model | manual diagrams | states/transitions | Temporal UI/history |
+| Best use | explicit learning baseline | state-machine comparison | production durable workflows |
 
-## Why the project starts with handmade saga
+## Current project decision
 
-The handmade saga was intentionally implemented first because it makes the distributed process explicit.
+For now:
 
-This helps demonstrate understanding of:
+```text
+Default implementation: Handmade process manager
+Comparison implementation: Spring Statemachine prototype
+Documented alternative: Temporal
+```
 
-- local transaction boundaries;
-- external calls outside DB transactions;
-- payment authorization versus approval;
-- inventory hold versus confirmation;
-- outbox-based event publication;
-- compensation after partial success;
-- retry after technical failures;
-- difference between business failures and technical failures.
+Reasoning:
 
-Starting with a workflow engine too early could hide these decisions behind framework abstractions.
+- handmade saga is easier to understand and debug
+- Spring Statemachine shows how a state-machine approach differs
+- Temporal is valuable but would significantly increase infrastructure and scope
 
-## Recommended direction for `v0.11.0`
+## Interview talking points
 
-`v0.11.0` should be focused and not introduce too many competing production flows.
+Useful explanation:
 
-Recommended scope:
+```text
+I first implemented a handmade saga to make transaction boundaries, retry, and compensation explicit.
+Then I extracted saga actions so orchestration logic and business step logic were separated.
+After that I added a Spring Statemachine prototype using the same actions, which allowed me to compare explicit process-manager orchestration with a state-machine approach.
+Temporal is documented as the next production-grade alternative, but I intentionally did not add it yet because it requires separate workflow infrastructure and would distract from the main learning goal.
+```
 
-1. Extract booking saga actions from the handmade process manager.
-2. Keep the handmade process manager as the default flow.
-3. Add this comparison document.
-4. Add Spring Statemachine prototype behind a disabled profile.
-5. Do not add Temporal runtime yet.
-
-## Recommended interview explanation
-
-The project uses a handmade orchestrated saga as the baseline implementation.
-
-I intentionally started with a handmade process manager because it makes transaction boundaries, compensation, retries, and idempotency concerns visible in the code.
-
-After that, I extracted reusable saga actions so the orchestration mechanism can be changed without duplicating business logic.
-
-This allows the same booking process to be compared with a state-machine-based approach such as Spring Statemachine, and later with a durable workflow platform such as Temporal.
-
-The default implementation remains simple and explicit, while the project still demonstrates awareness of production workflow-engine trade-offs.
-
-## Future work
+## Future options
 
 Possible future milestones:
 
-- add Spring Statemachine prototype behind profile;
-- add diagram comparing state transitions;
-- add Temporal design document;
-- add Temporal prototype in a separate branch or milestone;
-- add cancellation/refund process as a separate business workflow;
-- add workflow observability metrics;
-- add correlation IDs across booking, inventory, payment, notification, Kafka events.
+1. Add tests specifically for Spring Statemachine prototype.
+2. Add profile-based comparison documentation in Swagger.
+3. Add Temporal prototype in a separate branch or module.
+4. Add cancellation/refund saga after payment approval.
+5. Add distributed tracing for saga execution.
