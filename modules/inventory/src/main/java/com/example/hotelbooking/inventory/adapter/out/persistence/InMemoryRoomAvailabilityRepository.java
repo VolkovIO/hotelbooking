@@ -1,6 +1,7 @@
 package com.example.hotelbooking.inventory.adapter.out.persistence;
 
 import com.example.hotelbooking.inventory.application.port.out.RoomAvailabilityRepository;
+import com.example.hotelbooking.inventory.domain.InventoryDomainException;
 import com.example.hotelbooking.inventory.domain.RoomAvailability;
 import java.time.LocalDate;
 import java.util.List;
@@ -18,7 +19,7 @@ class InMemoryRoomAvailabilityRepository implements RoomAvailabilityRepository {
   private final Map<String, RoomAvailability> storage = new ConcurrentHashMap<>();
 
   @Override
-  public void saveAll(List<RoomAvailability> availabilityList) {
+  public synchronized void saveAll(List<RoomAvailability> availabilityList) {
     for (RoomAvailability availability : availabilityList) {
       storage.put(
           keyOf(availability.getHotelId(), availability.getRoomTypeId(), availability.getDate()),
@@ -44,11 +45,47 @@ class InMemoryRoomAvailabilityRepository implements RoomAvailabilityRepository {
   }
 
   @Override
-  public RoomAvailability save(RoomAvailability availability) {
+  public synchronized RoomAvailability save(RoomAvailability availability) {
     storage.put(
         keyOf(availability.getHotelId(), availability.getRoomTypeId(), availability.getDate()),
         availability);
     return availability;
+  }
+
+  @Override
+  public synchronized boolean tryPlaceHold(
+      UUID hotelId, UUID roomTypeId, LocalDate date, int rooms) {
+    String key = keyOf(hotelId, roomTypeId, date);
+    RoomAvailability current = storage.get(key);
+
+    if (current == null) {
+      return false;
+    }
+
+    try {
+      storage.put(key, current.placeHold(rooms));
+      return true;
+    } catch (InventoryDomainException exception) {
+      return false;
+    }
+  }
+
+  @Override
+  public synchronized boolean releaseHold(
+      UUID hotelId, UUID roomTypeId, LocalDate date, int rooms) {
+    String key = keyOf(hotelId, roomTypeId, date);
+    RoomAvailability current = storage.get(key);
+
+    if (current == null) {
+      return false;
+    }
+
+    try {
+      storage.put(key, current.releaseHold(rooms));
+      return true;
+    } catch (InventoryDomainException exception) {
+      return false;
+    }
   }
 
   private String keyOf(UUID hotelId, UUID roomTypeId, LocalDate date) {

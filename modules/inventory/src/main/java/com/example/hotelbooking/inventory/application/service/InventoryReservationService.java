@@ -25,6 +25,7 @@ public class InventoryReservationService implements InventoryReservationUseCase 
   private final RoomHoldRepository roomHoldRepository;
   private final ReleaseRoomHoldUseCase releaseRoomHoldUseCase;
   private final ConfirmRoomHoldUseCase confirmRoomHoldUseCase;
+  private final AtomicRoomHoldReservationService atomicRoomHoldReservationService;
 
   @Override
   public UUID placeHold(
@@ -37,26 +38,9 @@ public class InventoryReservationService implements InventoryReservationUseCase 
         checkOut,
         rooms);
 
-    LocalDate availabilityTo = checkOut.minusDays(1);
+    validateHoldRequest(checkIn, checkOut, rooms);
 
-    if (availabilityTo.isBefore(checkIn)) {
-      throw new InventoryDomainException("Invalid hold period");
-    }
-
-    long requiredDays = ChronoUnit.DAYS.between(checkIn, checkOut);
-
-    List<RoomAvailability> availabilityList =
-        roomAvailabilityRepository.findByRoomTypeAndDateRange(
-            hotelId, roomTypeId, checkIn, availabilityTo);
-
-    if (availabilityList.size() != requiredDays) {
-      throw new InventoryDomainException("Availability is not configured for the full stay period");
-    }
-
-    List<RoomAvailability> updatedAvailability =
-        availabilityList.stream().map(item -> item.placeHold(rooms)).toList();
-
-    roomAvailabilityRepository.saveAll(updatedAvailability);
+    atomicRoomHoldReservationService.reserve(hotelId, roomTypeId, checkIn, checkOut, rooms);
 
     RoomHold roomHold = RoomHold.create(hotelId, roomTypeId, checkIn, checkOut, rooms);
     roomHoldRepository.save(roomHold);
@@ -131,5 +115,15 @@ public class InventoryReservationService implements InventoryReservationUseCase 
         checkIn,
         checkOut,
         rooms);
+  }
+
+  private void validateHoldRequest(LocalDate checkIn, LocalDate checkOut, int rooms) {
+    if (!checkOut.isAfter(checkIn)) {
+      throw new InventoryDomainException("Invalid hold period");
+    }
+
+    if (rooms <= 0) {
+      throw new InventoryDomainException("rooms must be positive");
+    }
   }
 }
