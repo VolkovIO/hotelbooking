@@ -17,4 +17,8 @@ public interface RoomAvailabilityRepository {
       UUID hotelId, UUID roomTypeId, LocalDate date);
 
   RoomAvailability save(RoomAvailability availability);
+
+  boolean tryPlaceHold(UUID hotelId, UUID roomTypeId, LocalDate date, int rooms);
+
+  boolean releaseHold(UUID hotelId, UUID roomTypeId, LocalDate date, int rooms);
 }

@@ -11,6 +11,7 @@ import com.example.hotelbooking.inventory.application.port.in.InitializeRoomAvai
 import com.example.hotelbooking.inventory.application.port.in.InventoryReservationUseCase;
 import com.example.hotelbooking.inventory.application.port.in.RegisterHotelUseCase;
 import com.example.hotelbooking.inventory.domain.Hotel;
+import com.example.hotelbooking.inventory.domain.InventoryDomainException;
 import com.example.hotelbooking.inventory.domain.RoomAvailability;
 import com.example.hotelbooking.inventory.domain.RoomType;
 import java.time.LocalDate;
@@ -18,8 +19,12 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -242,25 +247,26 @@ class InventoryLastRoomContentionIntegrationTest {
      *
      * CLIENT_COUNT=20 is enough to expose a race condition without making the
      * test too heavy.
+     *
+     * ExecutorService is AutoCloseable in Java 21, so try-with-resources makes
+     * resource cleanup explicit for static analysis tools.
      */
-    var executor = Executors.newFixedThreadPool(CLIENT_COUNT);
+    try (ExecutorService executor = Executors.newFixedThreadPool(CLIENT_COUNT)) {
+      /*
+       * CountDownLatch is used to align the start of all threads.
+       *
+       * Without this latch, tasks may start one by one as they are submitted,
+       * which reduces real contention.
+       *
+       * With this latch:
+       *
+       * - all tasks are submitted first;
+       * - all tasks wait on startLatch.await(...);
+       * - the test calls startLatch.countDown();
+       * - all tasks start competing almost at the same time.
+       */
+      CountDownLatch startLatch = new CountDownLatch(1);
 
-    /*
-     * CountDownLatch is used to align the start of all threads.
-     *
-     * Without this latch, tasks may start one by one as they are submitted,
-     * which reduces real contention.
-     *
-     * With this latch:
-     *
-     * - all tasks are submitted first;
-     * - all tasks wait on startLatch.await(...);
-     * - the test calls startLatch.countDown();
-     * - all tasks start competing almost at the same time.
-     */
-    CountDownLatch startLatch = new CountDownLatch(1);
-
-    try {
       /*
        * Build CLIENT_COUNT independent hold attempts.
        *
@@ -294,22 +300,7 @@ class InventoryLastRoomContentionIntegrationTest {
        *
        * The timeout prevents the test from hanging forever if a worker gets stuck.
        */
-      return futures.stream()
-          .map(
-              future -> {
-                try {
-                  return future.get(10, TimeUnit.SECONDS);
-                } catch (Exception exception) {
-                  throw new IllegalStateException(
-                      "Concurrent hold attempt did not finish", exception);
-                }
-              })
-          .toList();
-    } finally {
-      /*
-       * Always stop executor threads, even when the test fails.
-       */
-      executor.shutdownNow();
+      return futures.stream().map(this::completedResult).toList();
     }
   }
 
@@ -339,17 +330,15 @@ class InventoryLastRoomContentionIntegrationTest {
             hotelId, roomTypeId, checkIn, checkOut, ROOMS_PER_BOOKING);
 
         return true;
-      } catch (RuntimeException exception) {
+      } catch (InventoryDomainException exception) {
         /*
          * Rejected hold attempts are expected.
          *
          * In this scenario 19 out of 20 clients should fail because only one
          * room is available.
          *
-         * We intentionally do not assert the exact exception type here because
-         * this test focuses on the concurrency invariant:
-         *
-         *   no more than one successful hold
+         * We catch the domain exception specifically because business rejection
+         * is expected, while any other exception should fail the test.
          */
         return false;
       }
@@ -361,5 +350,20 @@ class InventoryLastRoomContentionIntegrationTest {
      * The test creates exactly one room type, so it is safe to take the first one.
      */
     return hotel.getRoomTypes().stream().map(RoomType::getId).findFirst().orElseThrow();
+  }
+
+  private Boolean completedResult(Future<Boolean> future) {
+    try {
+      return future.get(10, TimeUnit.SECONDS);
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+
+      throw new IllegalStateException(
+          "Interrupted while waiting for concurrent hold attempt", exception);
+    } catch (ExecutionException exception) {
+      throw new IllegalStateException("Concurrent hold attempt failed unexpectedly", exception);
+    } catch (TimeoutException exception) {
+      throw new IllegalStateException("Concurrent hold attempt did not finish", exception);
+    }
   }
 }
