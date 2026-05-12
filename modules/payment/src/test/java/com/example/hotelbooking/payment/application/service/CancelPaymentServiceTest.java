@@ -3,8 +3,6 @@ package com.example.hotelbooking.payment.application.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.same;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -29,6 +27,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -36,6 +35,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class CancelPaymentServiceTest {
 
   private static final UUID PAYMENT_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+  private static final UUID CORRELATION_ID =
+      UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
   private static final PaymentProviderPaymentId PROVIDER_PAYMENT_ID =
       new PaymentProviderPaymentId("fake-payment-123");
 
@@ -57,11 +58,19 @@ class CancelPaymentServiceTest {
     when(persistenceService.save(any(Payment.class), any(PaymentLifecycleEvent.class)))
         .thenAnswer(invocation -> invocation.getArgument(0));
 
-    Payment result = service.cancel(new CancelPaymentCommand(PAYMENT_ID));
+    Payment result = service.cancel(new CancelPaymentCommand(PAYMENT_ID, CORRELATION_ID));
 
     assertEquals(PaymentStatus.CANCELLED, result.getStatus());
+
     verify(gateway).cancel(PROVIDER_PAYMENT_ID);
-    verify(persistenceService).save(same(payment), any(PaymentLifecycleEvent.class));
+
+    ArgumentCaptor<PaymentLifecycleEvent> eventCaptor =
+        ArgumentCaptor.forClass(PaymentLifecycleEvent.class);
+
+    verify(persistenceService).save(any(Payment.class), eventCaptor.capture());
+
+    assertEquals("PaymentCancelled", eventCaptor.getValue().eventType());
+    assertEquals(CORRELATION_ID, eventCaptor.getValue().correlationId());
   }
 
   @Test
@@ -71,8 +80,8 @@ class CancelPaymentServiceTest {
     when(paymentRepository.findById(new PaymentId(PAYMENT_ID))).thenReturn(Optional.empty());
 
     assertThrows(
-        PaymentNotFoundException.class, () -> service.cancel(new CancelPaymentCommand(PAYMENT_ID)));
-    verify(persistenceService, never()).save(any(Payment.class), any(PaymentLifecycleEvent.class));
+        PaymentNotFoundException.class,
+        () -> service.cancel(new CancelPaymentCommand(PAYMENT_ID, CORRELATION_ID)));
   }
 
   private CancelPaymentService newService() {

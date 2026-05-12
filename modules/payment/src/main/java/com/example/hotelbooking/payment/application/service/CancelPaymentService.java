@@ -31,6 +31,7 @@ public class CancelPaymentService {
     PaymentProviderGateway gateway = gatewayRegistry.getGateway(payment.getProvider());
     gateway.cancel(payment.getProviderPaymentId());
 
-    return persistenceService.save(payment, PaymentLifecycleEvent.cancelled(payment));
+    return persistenceService.save(
+        payment, PaymentLifecycleEvent.cancelled(payment, command.correlationId(), null));
   }
 }

@@ -32,7 +32,9 @@ public class ApprovePaymentSagaAction implements BookingSagaAction {
       throw new BookingSagaStateException("Cannot approve payment before authorization");
     }
 
-    PaymentResult payment = paymentClient.approve(paymentId);
+    UUID correlationId = saga.getId().value();
+
+    PaymentResult payment = paymentClient.approve(paymentId, correlationId);
 
     if (payment.status() != PaymentStatus.APPROVED) {
       throw new BookingSagaStateException(

@@ -37,6 +37,8 @@ class AuthorizePaymentServiceTest {
 
   private static final UUID BOOKING_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
   private static final UUID USER_ID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+  private static final UUID CORRELATION_ID =
+      UUID.fromString("cccccccc-cccc-cccc-cccc-cccccccccccc");
   private static final BigDecimal AMOUNT = new BigDecimal("12500.00");
   private static final String CURRENCY = "RUB";
   private static final PaymentProviderPaymentId PROVIDER_PAYMENT_ID =
@@ -70,8 +72,14 @@ class AuthorizePaymentServiceTest {
     assertEquals(PROVIDER_PAYMENT_ID, result.getProviderPaymentId());
 
     ArgumentCaptor<Payment> paymentCaptor = ArgumentCaptor.forClass(Payment.class);
-    verify(persistenceService).save(paymentCaptor.capture(), any(PaymentLifecycleEvent.class));
+    ArgumentCaptor<PaymentLifecycleEvent> eventCaptor =
+        ArgumentCaptor.forClass(PaymentLifecycleEvent.class);
+
+    verify(persistenceService).save(paymentCaptor.capture(), eventCaptor.capture());
+
     assertEquals(PaymentStatus.AUTHORIZED, paymentCaptor.getValue().getStatus());
+    assertEquals("PaymentAuthorized", eventCaptor.getValue().eventType());
+    assertEquals(CORRELATION_ID, eventCaptor.getValue().correlationId());
   }
 
   @Test
@@ -90,6 +98,14 @@ class AuthorizePaymentServiceTest {
 
     assertEquals(PaymentStatus.DECLINED, result.getStatus());
     assertEquals(FAILURE_REASON, result.getFailureReason());
+
+    ArgumentCaptor<PaymentLifecycleEvent> eventCaptor =
+        ArgumentCaptor.forClass(PaymentLifecycleEvent.class);
+
+    verify(persistenceService).save(any(Payment.class), eventCaptor.capture());
+
+    assertEquals("PaymentDeclined", eventCaptor.getValue().eventType());
+    assertEquals(CORRELATION_ID, eventCaptor.getValue().correlationId());
   }
 
   @Test
@@ -112,7 +128,7 @@ class AuthorizePaymentServiceTest {
   }
 
   private AuthorizePaymentCommand command() {
-    return new AuthorizePaymentCommand(BOOKING_ID, USER_ID, AMOUNT, CURRENCY);
+    return new AuthorizePaymentCommand(BOOKING_ID, USER_ID, AMOUNT, CURRENCY, CORRELATION_ID);
   }
 
   private Payment existingAuthorizedPayment() {

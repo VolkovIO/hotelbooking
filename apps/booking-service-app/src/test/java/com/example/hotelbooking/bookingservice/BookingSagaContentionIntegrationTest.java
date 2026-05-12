@@ -27,6 +27,7 @@ import com.example.hotelbooking.booking.domain.UserId;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
@@ -387,6 +388,8 @@ class BookingSagaContentionIntegrationTest {
 
     @Override
     public PaymentResult authorize(PaymentAuthorizationRequest request) {
+      Objects.requireNonNull(request.correlationId(), "correlationId must not be null");
+
       authorizationAttempts.incrementAndGet();
 
       UUID paymentId = UUID.randomUUID();
@@ -409,7 +412,9 @@ class BookingSagaContentionIntegrationTest {
     }
 
     @Override
-    public PaymentResult approve(UUID paymentId) {
+    public PaymentResult approve(UUID paymentId, UUID correlationId) {
+      Objects.requireNonNull(correlationId, "correlationId must not be null");
+
       approvalAttempts.incrementAndGet();
 
       PaymentResult authorized = payments.get(paymentId);
@@ -436,7 +441,9 @@ class BookingSagaContentionIntegrationTest {
     }
 
     @Override
-    public PaymentResult cancel(UUID paymentId) {
+    public PaymentResult cancel(UUID paymentId, UUID correlationId) {
+      Objects.requireNonNull(correlationId, "correlationId must not be null");
+
       cancellationAttempts.incrementAndGet();
 
       PaymentResult authorized = payments.get(paymentId);

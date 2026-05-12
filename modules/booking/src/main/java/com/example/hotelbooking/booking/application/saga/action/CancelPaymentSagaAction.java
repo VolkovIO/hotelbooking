@@ -33,7 +33,9 @@ public class CancelPaymentSagaAction implements BookingSagaAction {
       return sagaRepository.save(saga);
     }
 
-    PaymentResult payment = paymentClient.cancel(paymentId);
+    UUID correlationId = saga.getId().value();
+
+    PaymentResult payment = paymentClient.cancel(paymentId, correlationId);
 
     if (payment.status() != PaymentStatus.CANCELLED) {
       throw new BookingSagaStateException(
