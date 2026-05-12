@@ -17,4 +17,5 @@ app:
   audit:
     kafka:
       booking-events-topic: ${AUDIT_BOOKING_EVENTS_TOPIC:booking.events}
+      payment-events-topic: ${AUDIT_PAYMENT_EVENTS_TOPIC:payment.events}
       group-id: ${AUDIT_KAFKA_GROUP_ID:audit-service}
