@@ -2,11 +2,205 @@
 
 This document tracks known limitations and future improvements for the hotel booking project.
 
-Current milestone: `v0.11.0`.
+Current milestone: `v0.12.0 — Integration tests + concurrency safety + CI`.
+
+## Testing and CI
+
+### 1. Full multi-service end-to-end contention test is not implemented
+
+Current coverage:
+
+- inventory-level contention test with real MongoDB Testcontainers
+- booking-level saga contention test with real PostgreSQL Testcontainers
+- controlled inventory and payment test doubles in the booking-level test
+
+Not implemented yet:
+
+```text
+real booking-service
+real inventory-service
+real payment-service
+real PostgreSQL
+real MongoDB
+real Kafka
+real gRPC calls
+all running together in one full system test
+```
+
+Decision for now:
+
+The current split is intentional.
+
+```text
+Inventory test proves the real inventory atomic invariant.
+Booking test proves saga behavior under controlled inventory rejection.
+```
+
+Future improvement:
+
+- add full-stack e2e tests using Docker Compose or dedicated system-test module
+- verify HTTP/gRPC boundaries with real running service applications
+- add Kafka assertions for booking events
+- add notification assertions for downstream side effects
+
+---
+
+### 2. Branch protection is not configured yet
+
+GitHub Actions CI exists and runs Gradle checks.
+
+However, repository branch protection may not yet require CI to pass before merge.
+
+Future improvement:
+
+- protect `master`
+- require `CI / Build and test` before merge
+- optionally require pull request reviews
+- optionally require branches to be up to date before merge
+
+Decision for now:
+
+Keep branch protection as a repository setup step after CI is stable.
+
+---
+
+### 3. CI runs one broad Gradle check job
+
+Current CI command:
+
+```bash
+./gradlew check --no-daemon --stacktrace
+```
+
+This is simple and understandable.
+
+Possible future improvements:
+
+- split CI into separate jobs for unit tests, integration tests, and static analysis
+- publish test reports more explicitly
+- enable Gradle build cache optimizations
+- consider `--parallel` if stable
+- add dependency vulnerability scanning later
+
+Decision for now:
+
+Keep CI simple until the project has more tests and the feedback time becomes a real bottleneck.
+
+---
+
+## Inventory and concurrency
+
+### 4. Inventory hold reservation uses application-level rollback for multi-day stays
+
+Inventory hold placement now uses atomic per-date updates.
+
+For a multi-day stay:
+
+```text
+reserve day 1 atomically
+reserve day 2 atomically
+reserve day 3 atomically
+...
+```
+
+If one date cannot be reserved, previously reserved dates are released.
+
+This is a pragmatic approach for the current project.
+
+Limitation:
+
+```text
+It is not a multi-document database transaction.
+```
+
+Risk:
+
+If rollback fails unexpectedly, a partial hold reservation could remain.
+
+Current mitigation:
+
+- rollback failures are logged
+- `RoomHold` is created only after all per-date reservations succeed
+
+Future improvement:
+
+- consider MongoDB transactions if replica-set/transaction semantics are required
+- add reconciliation job for inconsistent availability state
+- make rollback attempts retryable
+- add metrics/alerts for rollback failures
+
+---
+
+### 5. Inventory hold expiration is not implemented
+
+Inventory holds are currently released explicitly by saga compensation.
+
+Implemented:
+
+- `placeHold`
+- `confirmHold`
+- `releaseHold`
+- `cancelConfirmedReservation`
+
+Not implemented yet:
+
+- automatic hold expiration
+- `expiresAt` on hold
+- scheduled cleanup of abandoned holds
+- `InventoryHoldExpired` event
+
+Future improvement:
+
+- add expiration timestamp to inventory hold
+- add scheduled expired hold release
+- make release idempotent
+- publish optional inventory expiration event
+
+---
+
+### 6. Confirm/release/cancel inventory operations can be hardened further
+
+The current milestone focuses on atomic hold placement because that is the critical last-room contention invariant.
+
+Future improvements:
+
+- review confirm hold behavior under concurrency
+- review release hold idempotency
+- review confirmed reservation cancellation under concurrency
+- add integration tests for confirm/release/cancel race scenarios
+- add optimistic or atomic state transitions for hold records if needed
+
+---
 
 ## Booking saga
 
-### 1. Cancellation after approved payment is not implemented
+### 7. Booking-level contention test uses controlled test doubles
+
+`BookingSagaContentionIntegrationTest` does not start the real inventory-service or payment-service.
+
+It uses:
+
+- real booking-service Spring context
+- real PostgreSQL
+- fake inventory reservation port
+- fake inventory lookup port
+- fake payment client
+
+Reason:
+
+```text
+The test focuses on booking saga behavior after inventory contention result is known.
+```
+
+Future improvement:
+
+- add full e2e saga contention test with real services
+- add contract tests between booking-service and inventory-service
+- verify gRPC error mapping in integration tests
+
+---
+
+### 8. Cancellation after approved payment is not implemented
 
 Current booking saga handles rollback during booking creation.
 
@@ -46,38 +240,11 @@ Future improvement:
 
 Decision for now:
 
-This is intentionally postponed to avoid making the project too broad before the saga comparison milestone is complete.
+This is intentionally postponed to avoid making the project too broad before core testing, observability, and portfolio documentation are stronger.
 
 ---
 
-### 2. Inventory hold expiration is not implemented
-
-Inventory holds are currently released explicitly by saga compensation.
-
-Implemented:
-
-- `placeHold`
-- `confirmHold`
-- `releaseHold`
-- `cancelConfirmedReservation`
-
-Not implemented yet:
-
-- automatic hold expiration
-- `expiresAt` on hold
-- scheduled cleanup of abandoned holds
-- `InventoryHoldExpired` event
-
-Future improvement:
-
-- add expiration timestamp to inventory hold
-- add scheduled expired hold release
-- make release idempotent
-- publish optional inventory expiration event
-
----
-
-### 3. Payment approval unknown outcome is not reconciled
+### 9. Payment approval unknown outcome is not reconciled
 
 If booking-service calls payment-service `approve(paymentId)` and loses the HTTP response, the real payment state may be unknown.
 
@@ -99,11 +266,11 @@ Future improvement:
 - add payment status query endpoint
 - add reconciliation job for unknown payment outcomes
 - make approve/cancel idempotent by command id or operation id
-- add stronger correlation/causation ids
+- add stronger correlation/causation IDs
 
 ---
 
-### 4. Retry handling is basic
+### 10. Retry handling is basic
 
 The handmade saga supports retry metadata:
 
@@ -121,209 +288,106 @@ Limitations:
 
 - no exponential backoff
 - no jitter
-- no dead-letter table for permanently failed sagas
-- no operator UI
-- no manual resume endpoint
-- no distributed lock for multi-instance retry scheduler beyond current DB safeguards
+- no dead-letter process for permanently failed sagas
+- no operational dashboard
 
 Future improvement:
 
-- exponential backoff
-- jitter
-- retry reason classification
-- operator/admin endpoints
-- failed saga dashboard
-- alerting on `FAILED` sagas
-
----
-
-### 5. Spring Statemachine prototype is not the default production-like flow
-
-In `v0.11.0`, Spring Statemachine is added as a runnable comparison prototype.
-
-Endpoint:
-
-```http
-POST /api/v1/bookings/saga-statemachine
-```
-
-Profile:
-
-```text
-booking-saga-springstatemachine-prototype
-```
-
-Limitations:
-
-- not the default booking saga flow
-- retry behavior is not as complete as the handmade process manager
-- durability still depends on existing `booking_sagas` persistence
-- state machine itself is not persisted as an independent workflow history
-- no production decision has been made to replace handmade saga
-
-Purpose:
-
-The prototype exists to compare orchestration styles, not to replace the current implementation.
-
----
-
-### 6. Temporal is documented but not implemented
-
-Temporal is a production-grade durable workflow engine, but it is not implemented in `v0.11.0`.
-
-Reason:
-
-- requires Temporal server/dev server
-- requires workers
-- requires workflow/activity programming model
-- introduces separate infrastructure
-- would significantly increase project scope
-
-Future improvement:
-
-Possible future milestone:
-
-```text
-v0.12.x or later:
-  prototype Temporal booking workflow in a separate module/branch
-```
-
-The current project documents Temporal as an architectural alternative only.
-
----
-
-## Outbox and Kafka
-
-### 7. Booking outbox polling is simple
-
-Current booking outbox publisher works and publishes booking events to Kafka.
-
-Limitations:
-
-- no advanced metrics
-- no outbox lag dashboard
-- no poison-message quarantine beyond retry/error fields
-- no admin reprocess endpoint
-
-Future improvement:
-
-- Micrometer metrics
-- outbox lag gauge
-- published/failed counters
-- reprocess endpoint for failed messages
-- alerting on stuck outbox records
-
----
-
-### 8. Kafka producer logs can be noisy on first initialization
-
-Kafka client logs print large producer configuration blocks when producer is first created.
-
-This is not a functional issue.
-
-Future improvement:
-
-- tune logging levels for Kafka internals in local profile
-- keep business logs visible while reducing infrastructure noise
-
----
-
-## Notification service
-
-### 9. Notification senders are logging adapters only
-
-Current notification-service supports notification flow end-to-end, but real external delivery is not implemented.
-
-Implemented:
-
-- preference API
-- notification persistence
-- delivery status
-- scheduler
-- logging sender
-- Kafka booking event consumer
-
-Not implemented:
-
-- real Telegram sender
-- real Max sender
-- real email sender
-
-Decision:
-
-This is intentional for the educational project. The goal was to complete the full internal cycle without spending time on external provider integrations.
-
-Future improvement:
-
-- Telegram adapter
-- Max adapter
-- SMTP/email adapter
-- provider-level retry/backoff
-- delivery receipts if supported
+- add retry policy abstraction
+- add backoff and jitter
+- add saga failure metrics
+- add admin/retry endpoint or operational repair command
 
 ---
 
 ## Observability
 
-### 10. Distributed tracing is not implemented
+### 11. Correlation and causation IDs are not fully implemented
 
-The system uses logs and correlation ids in events, but there is no full tracing setup yet.
-
-Missing:
-
-- OpenTelemetry tracing
-- trace propagation over HTTP/gRPC/Kafka
-- spans for saga steps
-- dashboard for saga execution path
+Current events and logs do not yet provide a complete traceable chain across all services.
 
 Future improvement:
 
-- add OpenTelemetry
-- propagate trace id/correlation id through booking, inventory, payment, notification
-- add saga step span attributes
-- visualize end-to-end flow
+- add `correlationId`
+- add `causationId`
+- propagate IDs across HTTP, gRPC, Kafka, and logs
+- include IDs in error responses
+- use IDs in audit/event timeline service
+
+This is planned for a future audit/timeline or observability milestone.
 
 ---
 
-### 11. Metrics are limited
+### 12. Metrics and tracing are not implemented yet
 
-Future useful metrics:
+Not implemented yet:
 
-- saga started/completed/compensated/failed counters
-- retry count distribution
-- outbox publication lag
-- notification delivery lag
-- payment declined rate
-- inventory hold failure rate
-
----
-
-## Security
-
-### 12. Internal service authentication is incomplete
-
-Some service-to-service integrations are intentionally simple in local development.
+- Prometheus/Grafana dashboards
+- OpenTelemetry distributed tracing
+- Kafka consumer metrics
+- saga outcome metrics
+- payment outcome metrics
+- notification metrics
+- centralized log search through ELK/Loki
 
 Future improvement:
 
-- mTLS or signed service tokens for internal HTTP/gRPC calls
-- stronger identity propagation
-- endpoint-level authorization for admin operations
+- add Micrometer metrics for saga results
+- add structured JSON logs
+- add OpenTelemetry traces across booking -> inventory -> payment -> Kafka -> notification
+- optionally add ELK or Loki profile for centralized log search
 
 ---
 
-## Documentation debt
+## API and product scope
 
-### 13. Diagrams must be kept in sync with implementation
+### 13. API error model can be improved
 
-The project now has Mermaid diagrams for booking saga and workflow comparison.
-
-Risk:
-
-Architecture diagrams can become stale when code changes.
+Current APIs use basic error responses.
 
 Future improvement:
 
-- update diagrams whenever saga steps change
-- keep manual verification examples current
-- document differences between handmade saga and Spring Statemachine prototype
+- introduce consistent error response format
+- add stable business error codes
+- include `correlationId` in error responses
+- improve OpenAPI examples
+- document expected business failures
+
+Decision for now:
+
+Postponed because testing, concurrency safety, and observability provide more interview value at this stage.
+
+---
+
+### 14. Frontend/BFF is postponed
+
+A lightweight frontend or BFF can be useful for demos.
+
+Possible future scope:
+
+- Google login
+- booking demo flow
+- booking status screen
+- booking event timeline
+- Swagger remains available
+
+Decision for now:
+
+Postpone until backend testing, audit/timeline, and observability are stronger.
+
+---
+
+### 15. Temporal is documentation-only for now
+
+Temporal is documented as a production-grade workflow alternative, but is not implemented in code.
+
+Reason:
+
+- requires Temporal server
+- requires worker runtime
+- requires workflow/activity programming model
+- changes the architecture significantly
+
+Decision for now:
+
+Keep Temporal as a future experiment, not part of the main project path.

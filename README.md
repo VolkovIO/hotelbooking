@@ -16,6 +16,9 @@ The main goal of the project is not to build a commercial booking product, but t
 - Docker Compose based local infrastructure
 - orchestration saga and compensation
 - comparison of handmade orchestration and Spring Statemachine
+- service-level integration testing with Testcontainers
+- concurrency safety for finite inventory
+- GitHub Actions CI
 
 The project is intentionally developed step by step. Each milestone adds one or several architectural concepts and keeps the implementation understandable for learning and interview discussion.
 
@@ -24,30 +27,27 @@ The project is intentionally developed step by step. Each milestone adds one or 
 Current version:
 
 ```text
-v0.11.0 — Saga orchestration comparison
+v0.12.0 — Integration tests, concurrency safety, and CI
 ```
 
-This version keeps the handmade booking saga as the main production-like flow and adds an experimental Spring Statemachine-based prototype for comparison.
+This version adds the first service-level integration tests for critical concurrency scenarios.
 
-The main booking saga endpoint remains:
-
-```http
-POST /api/v1/bookings/saga
-```
-
-The Spring Statemachine prototype endpoint is available only with profile:
+The main focus is last room contention:
 
 ```text
-booking-saga-springstatemachine-prototype
+many clients try to book the same last available room concurrently
 ```
 
-Prototype endpoint:
+Expected behavior:
 
-```http
-POST /api/v1/bookings/saga-statemachine
+```text
+exactly one client wins
+no over-holding is possible
+only one booking is confirmed
+competing bookings are rejected or failed safely
 ```
 
-Both implementations reuse the same extracted saga action classes. This allows comparing orchestration approaches without duplicating the business steps.
+This milestone also adds GitHub Actions CI so that Gradle checks run automatically for pull requests and pushes to `master`.
 
 ## Architecture focus
 
@@ -72,6 +72,7 @@ Main principles used in the project:
 - business state changes are explicit
 - integration events are published through outbox where needed
 - external service calls are not wrapped into local database transactions
+- critical persistence-boundary behavior is covered by integration tests
 
 ## Services and modules
 
@@ -97,8 +98,9 @@ Responsible for:
 - confirming holds
 - releasing holds
 - cancelling confirmed reservations
+- protecting finite room availability under concurrent hold attempts
 
-Booking-service communicates with inventory-service through gRPC.
+Booking-service communicates with inventory-service through gRPC in the normal local application flow.
 
 ### Payment service
 
@@ -189,31 +191,113 @@ docs/booking-saga.md
 docs/workflow-engine-comparison.md
 ```
 
-## Handmade saga vs Spring Statemachine prototype
+## Integration testing and concurrency safety
 
-The project contains two booking saga orchestration styles.
+Version `v0.12.0` adds automated tests for last room contention.
 
-| Implementation | Endpoint | Purpose |
-|---|---|---|
-| Handmade process manager | `POST /api/v1/bookings/saga` | Main production-like flow |
-| Spring Statemachine prototype | `POST /api/v1/bookings/saga-statemachine` | Learning and comparison |
+### Inventory-level contention
 
-The handmade process manager owns:
+Test:
 
-- retry loop
-- current step execution
-- compensation decision
-- durable state handling
+```text
+InventoryLastRoomContentionIntegrationTest
+```
 
-The Spring Statemachine prototype demonstrates:
+Location:
 
-- states
-- transitions
-- guards
-- choice state
-- action reuse
+```text
+apps/inventory-service-app/src/test/java/com/example/hotelbooking/inventoryservice/InventoryLastRoomContentionIntegrationTest.java
+```
 
-Temporal is currently documented as a production-grade alternative, but is not implemented in code in this milestone because it requires separate workflow infrastructure and a different runtime model.
+The test uses real MongoDB through Testcontainers and verifies:
+
+```text
+20 concurrent hold attempts
+1 available room
+exactly 1 successful hold
+heldRooms = 1
+availableRooms = 0
+```
+
+This test protects the inventory invariant:
+
+```text
+successful holds must not exceed available rooms
+```
+
+### Atomic inventory hold reservation
+
+Inventory hold placement now uses atomic conditional MongoDB updates instead of read-check-save updates.
+
+Conceptually:
+
+```text
+increment heldRooms
+only if totalRooms - heldRooms - bookedRooms >= requestedRooms
+```
+
+This prevents two concurrent clients from placing holds on the same last available room.
+
+### Booking-level saga contention
+
+Test:
+
+```text
+BookingSagaContentionIntegrationTest
+```
+
+Location:
+
+```text
+apps/booking-service-app/src/test/java/com/example/hotelbooking/bookingservice/BookingSagaContentionIntegrationTest.java
+```
+
+The test uses real booking-service Spring context and PostgreSQL through Testcontainers.
+
+Inventory and payment are controlled test doubles. This keeps the test focused on booking saga behavior.
+
+Expected result:
+
+```text
+completed sagas = 1
+failed sagas = 19
+confirmed bookings = 1
+rejected bookings = 19
+payment authorization calls = 1
+payment approval calls = 1
+payment cancellation calls = 0
+```
+
+More details are documented in:
+
+```text
+docs/integration-testing.md
+```
+
+## GitHub Actions CI
+
+The project contains a CI workflow:
+
+```text
+.github/workflows/ci.yml
+```
+
+The workflow runs on:
+
+```text
+pull requests to master
+pushes to master
+```
+
+Main CI command:
+
+```bash
+./gradlew check --no-daemon --stacktrace
+```
+
+The workflow uses Java 21 and Gradle caching.
+
+If checks fail, test/static-analysis reports are uploaded as workflow artifacts.
 
 ## Running checks
 
@@ -228,7 +312,16 @@ Module-focused checks:
 
 ```bash
 ./gradlew :modules:booking:check
-./gradlew :apps:booking-service-app:bootJar
+./gradlew :modules:inventory:check
+./gradlew :apps:booking-service-app:check
+./gradlew :apps:inventory-service-app:check
+```
+
+Focused integration tests:
+
+```bash
+./gradlew :apps:inventory-service-app:integrationTest --tests "*InventoryLastRoomContentionIntegrationTest"
+./gradlew :apps:booking-service-app:integrationTest --tests "*BookingSagaContentionIntegrationTest"
 ```
 
 Before pull requests, run:
@@ -301,6 +394,7 @@ Examples of conscious trade-offs:
 - automatic inventory hold expiration is documented as future hardening
 - Spring Statemachine is introduced as a prototype, not as a replacement for the main flow
 - Temporal is compared in documentation, not added as infrastructure yet
+- booking-level contention test uses inventory/payment doubles instead of full multi-service e2e infrastructure
 
 This keeps the project understandable and useful for interview discussion.
 
@@ -316,15 +410,20 @@ Completed milestones include:
 - saga retry and compensation
 - saga action extraction
 - Spring Statemachine prototype for orchestration comparison
+- inventory concurrency safety with atomic hold reservation
+- service-level integration tests with Testcontainers
+- GitHub Actions CI
 
 Possible future milestones:
 
-- observability with correlation IDs, metrics, and tracing
+- audit/event timeline service with correlation and causation IDs
+- observability with structured logs, metrics, tracing, and optional centralized logging
+- load testing with k6
 - stronger idempotency and reconciliation for unknown outcomes
 - cancellation and refund process for already approved bookings
 - automatic inventory hold expiration
 - Temporal-based workflow prototype in a separate branch or milestone
-- richer integration and contract tests
+- richer integration, contract, and full e2e tests
 
 ## Interview discussion points
 
@@ -341,3 +440,7 @@ This project can be used to discuss:
 - why payment authorization and approval are separate
 - why inventory hold and confirmation are separate
 - how handmade process manager compares with Spring Statemachine and Temporal
+- why read-check-save is unsafe under high contention
+- how atomic conditional updates protect finite inventory
+- how Testcontainers helps verify real persistence behavior
+- why CI is important for regression protection
