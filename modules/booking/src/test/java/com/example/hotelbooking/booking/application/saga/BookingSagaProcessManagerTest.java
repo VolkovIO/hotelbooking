@@ -9,6 +9,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.example.hotelbooking.booking.application.event.BookingLifecycleEvent;
 import com.example.hotelbooking.booking.application.payment.PaymentAuthorizationRequest;
 import com.example.hotelbooking.booking.application.payment.PaymentClientException;
 import com.example.hotelbooking.booking.application.payment.PaymentResult;
@@ -40,6 +41,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -131,7 +133,18 @@ class BookingSagaProcessManagerTest {
     verify(inventoryReservationPort).confirmHold(HOLD_ID);
     verify(paymentClient).approve(PAYMENT_ID);
     verify(inventoryReservationPort, never()).releaseHold(any(UUID.class));
-    verify(bookingStateChangePersistenceService, times(2)).persist(eq(booking), any());
+
+    ArgumentCaptor<BookingLifecycleEvent> eventCaptor =
+        ArgumentCaptor.forClass(BookingLifecycleEvent.class);
+
+    verify(bookingStateChangePersistenceService, times(2))
+        .persist(eq(booking), eventCaptor.capture());
+
+    List<BookingLifecycleEvent> persistedEvents = eventCaptor.getAllValues();
+
+    assertEquals(2, persistedEvents.size());
+
+    persistedEvents.forEach(event -> assertEquals(saga.getId().value(), event.correlationId()));
   }
 
   @Test

@@ -50,8 +50,10 @@ public class ConfirmBookingSagaAction implements BookingSagaAction {
 
     booking.confirmHeldBooking();
 
+    UUID correlationId = saga.getId().value();
+
     bookingStateChangePersistenceService.persist(
-        booking, BookingLifecycleEvent.confirmed(booking, confirmedHoldId));
+        booking, BookingLifecycleEvent.confirmed(booking, confirmedHoldId, correlationId, null));
 
     saga.markBookingConfirmed();
     sagaRepository.save(saga);

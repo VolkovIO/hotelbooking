@@ -47,9 +47,11 @@ public class ConfirmBookingService implements ConfirmBookingUseCase {
 
     booking.confirmHeldBooking();
 
+    UUID correlationId = UUID.randomUUID();
+
     Booking savedBooking =
         bookingStateChangePersistenceService.persist(
-            booking, BookingLifecycleEvent.confirmed(booking, holdId));
+            booking, BookingLifecycleEvent.confirmed(booking, holdId, correlationId, null));
 
     log.info(
         "Booking confirmed: bookingId={}, status={}",

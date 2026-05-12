@@ -32,7 +32,8 @@ class BookingStateChangePersistenceServiceTest {
   @Test
   void shouldSaveBookingBeforeOutboxEvent() {
     Booking booking = bookingOnHold();
-    BookingLifecycleEvent event = BookingLifecycleEvent.placedOnHold(booking);
+    BookingLifecycleEvent event =
+        BookingLifecycleEvent.placedOnHold(booking, UUID.randomUUID(), null);
 
     when(bookingRepository.save(booking)).thenReturn(booking);
 

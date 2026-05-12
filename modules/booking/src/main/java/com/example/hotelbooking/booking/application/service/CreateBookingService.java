@@ -72,9 +72,11 @@ public class CreateBookingService implements CreateBookingUseCase {
 
     booking.placeOnHold(holdId);
 
+    UUID correlationId = UUID.randomUUID();
+
     Booking savedBooking =
         bookingStateChangePersistenceService.persist(
-            booking, BookingLifecycleEvent.placedOnHold(booking));
+            booking, BookingLifecycleEvent.placedOnHold(booking, correlationId, null));
 
     log.info(
         "Booking created: bookingId={}, userId={}, hotelId={}, roomTypeId={}, status={}, holdId={}",
