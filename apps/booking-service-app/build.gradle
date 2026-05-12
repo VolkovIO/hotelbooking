@@ -17,4 +17,7 @@ dependencies {
     implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:${rootProject.ext.versions.springdoc}"
 
     runtimeOnly 'org.postgresql:postgresql'
+
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.testcontainers:postgresql'
 }
