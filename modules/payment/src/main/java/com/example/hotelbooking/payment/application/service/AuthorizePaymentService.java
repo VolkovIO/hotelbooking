@@ -53,11 +53,13 @@ public class AuthorizePaymentService {
     if (result.authorized()) {
       payment.markAuthorized(result.providerPaymentId());
 
-      return persistenceService.save(payment, PaymentLifecycleEvent.authorized(payment));
+      return persistenceService.save(
+          payment, PaymentLifecycleEvent.authorized(payment, command.correlationId(), null));
     }
 
     payment.markDeclined(result.failureReason());
 
-    return persistenceService.save(payment, PaymentLifecycleEvent.declined(payment));
+    return persistenceService.save(
+        payment, PaymentLifecycleEvent.declined(payment, command.correlationId(), null));
   }
 }

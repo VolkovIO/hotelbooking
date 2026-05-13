@@ -57,9 +57,11 @@ public class CancelBookingService implements CancelBookingUseCase {
       throw new BookingDomainException("Only ON_HOLD or CONFIRMED booking can be cancelled");
     }
 
+    UUID correlationId = UUID.randomUUID();
+
     Booking savedBooking =
         bookingStateChangePersistenceService.persist(
-            booking, BookingLifecycleEvent.cancelled(booking, previousStatus));
+            booking, BookingLifecycleEvent.cancelled(booking, previousStatus, correlationId, null));
 
     log.info(
         "Booking cancelled: bookingId={}, userId={}, status={}",

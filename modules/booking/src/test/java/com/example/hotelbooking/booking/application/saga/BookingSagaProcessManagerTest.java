@@ -9,6 +9,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.example.hotelbooking.booking.application.event.BookingLifecycleEvent;
 import com.example.hotelbooking.booking.application.payment.PaymentAuthorizationRequest;
 import com.example.hotelbooking.booking.application.payment.PaymentClientException;
 import com.example.hotelbooking.booking.application.payment.PaymentResult;
@@ -40,6 +41,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -116,7 +118,8 @@ class BookingSagaProcessManagerTest {
         .thenReturn(HOLD_ID);
     when(paymentClient.authorize(any(PaymentAuthorizationRequest.class)))
         .thenReturn(authorizedPayment(booking));
-    when(paymentClient.approve(PAYMENT_ID)).thenReturn(approvedPayment(booking));
+    when(paymentClient.approve(eq(PAYMENT_ID), any(UUID.class)))
+        .thenReturn(approvedPayment(booking));
 
     BookingSaga result = processManager.process(saga.getId());
 
@@ -127,11 +130,12 @@ class BookingSagaProcessManagerTest {
 
     verify(inventoryReservationPort)
         .placeHold(HOTEL_ID, ROOM_TYPE_ID, STAY_PERIOD.checkIn(), STAY_PERIOD.checkOut(), 1);
-    verify(paymentClient).authorize(any(PaymentAuthorizationRequest.class));
     verify(inventoryReservationPort).confirmHold(HOLD_ID);
-    verify(paymentClient).approve(PAYMENT_ID);
+    verify(paymentClient).approve(PAYMENT_ID, saga.getId().value());
     verify(inventoryReservationPort, never()).releaseHold(any(UUID.class));
-    verify(bookingStateChangePersistenceService, times(2)).persist(eq(booking), any());
+
+    assertPaymentAuthorizationUsesSagaCorrelationId(saga);
+    assertBookingEventsUseSagaCorrelationId(booking, saga);
   }
 
   @Test
@@ -158,7 +162,7 @@ class BookingSagaProcessManagerTest {
     verify(paymentClient).authorize(any(PaymentAuthorizationRequest.class));
     verify(inventoryReservationPort).releaseHold(HOLD_ID);
     verify(inventoryReservationPort, never()).confirmHold(any(UUID.class));
-    verify(paymentClient, never()).approve(any(UUID.class));
+    verify(paymentClient, never()).approve(any(UUID.class), any(UUID.class));
     verify(bookingStateChangePersistenceService, times(2)).persist(eq(booking), any());
   }
 
@@ -188,7 +192,7 @@ class BookingSagaProcessManagerTest {
     verify(paymentClient).authorize(any(PaymentAuthorizationRequest.class));
     verify(inventoryReservationPort, never()).confirmHold(any(UUID.class));
     verify(inventoryReservationPort, never()).releaseHold(any(UUID.class));
-    verify(paymentClient, never()).approve(any(UUID.class));
+    verify(paymentClient, never()).approve(any(UUID.class), any(UUID.class));
     verify(bookingStateChangePersistenceService).persist(eq(booking), any());
   }
 
@@ -205,7 +209,8 @@ class BookingSagaProcessManagerTest {
     when(paymentClient.authorize(any(PaymentAuthorizationRequest.class)))
         .thenThrow(new PaymentClientException("payment-service is unavailable"))
         .thenReturn(authorizedPayment(booking));
-    when(paymentClient.approve(PAYMENT_ID)).thenReturn(approvedPayment(booking));
+    when(paymentClient.approve(eq(PAYMENT_ID), any(UUID.class)))
+        .thenReturn(approvedPayment(booking));
 
     BookingSaga waitingRetrySaga = processManager.process(saga.getId());
 
@@ -222,7 +227,7 @@ class BookingSagaProcessManagerTest {
         .placeHold(HOTEL_ID, ROOM_TYPE_ID, STAY_PERIOD.checkIn(), STAY_PERIOD.checkOut(), 1);
     verify(paymentClient, times(2)).authorize(any(PaymentAuthorizationRequest.class));
     verify(inventoryReservationPort).confirmHold(HOLD_ID);
-    verify(paymentClient).approve(PAYMENT_ID);
+    verify(paymentClient).approve(PAYMENT_ID, saga.getId().value());
   }
 
   private Booking newBooking() {
@@ -270,5 +275,28 @@ class BookingSagaProcessManagerTest {
         "FAKE",
         "fake-payment-declined",
         "payment amount exceeds fake provider decline threshold");
+  }
+
+  private void assertPaymentAuthorizationUsesSagaCorrelationId(BookingSaga saga) {
+    ArgumentCaptor<PaymentAuthorizationRequest> authorizationRequestCaptor =
+        ArgumentCaptor.forClass(PaymentAuthorizationRequest.class);
+
+    verify(paymentClient).authorize(authorizationRequestCaptor.capture());
+
+    assertEquals(saga.getId().value(), authorizationRequestCaptor.getValue().correlationId());
+  }
+
+  private void assertBookingEventsUseSagaCorrelationId(Booking booking, BookingSaga saga) {
+    ArgumentCaptor<BookingLifecycleEvent> eventCaptor =
+        ArgumentCaptor.forClass(BookingLifecycleEvent.class);
+
+    verify(bookingStateChangePersistenceService, times(2))
+        .persist(eq(booking), eventCaptor.capture());
+
+    List<BookingLifecycleEvent> persistedEvents = eventCaptor.getAllValues();
+
+    assertEquals(2, persistedEvents.size());
+
+    persistedEvents.forEach(event -> assertEquals(saga.getId().value(), event.correlationId()));
   }
 }

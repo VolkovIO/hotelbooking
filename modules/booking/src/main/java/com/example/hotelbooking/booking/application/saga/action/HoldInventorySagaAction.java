@@ -50,8 +50,10 @@ public class HoldInventorySagaAction implements BookingSagaAction {
 
     booking.placeOnHold(holdId);
 
+    UUID correlationId = saga.getId().value();
+
     bookingStateChangePersistenceService.persist(
-        booking, BookingLifecycleEvent.placedOnHold(booking));
+        booking, BookingLifecycleEvent.placedOnHold(booking, correlationId, null));
 
     saga.markInventoryHeld();
     sagaRepository.save(saga);

@@ -31,33 +31,57 @@ public record BookingLifecycleEvent(
     Objects.requireNonNull(occurredAt, "occurredAt must not be null");
     Objects.requireNonNull(bookingId, "bookingId must not be null");
     Objects.requireNonNull(correlationId, "correlationId must not be null");
+
     payload = Map.copyOf(Objects.requireNonNull(payload, "payload must not be null"));
   }
 
-  public static BookingLifecycleEvent placedOnHold(Booking booking) {
-    return newEvent(BOOKING_PLACED_ON_HOLD, booking, Map.of("holdId", booking.getHoldId()));
+  public static BookingLifecycleEvent placedOnHold(
+      Booking booking, UUID correlationId, UUID causationId) {
+    return newEvent(
+        BOOKING_PLACED_ON_HOLD,
+        booking,
+        Map.of("holdId", booking.getHoldId()),
+        correlationId,
+        causationId);
   }
 
-  public static BookingLifecycleEvent confirmed(Booking booking, UUID confirmedHoldId) {
-    return newEvent(BOOKING_CONFIRMED, booking, Map.of("confirmedHoldId", confirmedHoldId));
+  public static BookingLifecycleEvent confirmed(
+      Booking booking, UUID confirmedHoldId, UUID correlationId, UUID causationId) {
+    return newEvent(
+        BOOKING_CONFIRMED,
+        booking,
+        Map.of("confirmedHoldId", confirmedHoldId),
+        correlationId,
+        causationId);
   }
 
-  public static BookingLifecycleEvent cancelled(Booking booking, BookingStatus previousStatus) {
-    return newEvent(BOOKING_CANCELLED, booking, Map.of("previousStatus", previousStatus.name()));
+  public static BookingLifecycleEvent cancelled(
+      Booking booking, BookingStatus previousStatus, UUID correlationId, UUID causationId) {
+    return newEvent(
+        BOOKING_CANCELLED,
+        booking,
+        Map.of("previousStatus", previousStatus.name()),
+        correlationId,
+        causationId);
   }
 
   private static BookingLifecycleEvent newEvent(
-      String eventType, Booking booking, Map<String, Object> additionalData) {
-    UUID eventId = UUID.randomUUID();
+      String eventType,
+      Booking booking,
+      Map<String, Object> additionalData,
+      UUID correlationId,
+      UUID causationId) {
+    Objects.requireNonNull(booking, "booking must not be null");
+    Objects.requireNonNull(correlationId, "correlationId must not be null");
 
     return new BookingLifecycleEvent(
-        eventId,
+        UUID.randomUUID(),
         eventType,
         EVENT_VERSION,
         Instant.now(),
         booking.getId(),
-        eventId,
-        null,
+        correlationId,
+        causationId,
         payload(booking, additionalData));
   }
 

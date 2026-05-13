@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: audit-service
+  output:
+    ansi:
+      enabled: ALWAYS
+  profiles:
+    group:
+      local:
+        - audit-mongo
+        - audit-kafka
+
+server:
+  port: ${AUDIT_SERVICE_PORT:8084}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html

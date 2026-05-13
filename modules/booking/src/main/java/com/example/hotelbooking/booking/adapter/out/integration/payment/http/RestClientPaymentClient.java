@@ -17,6 +17,8 @@ import org.springframework.web.client.RestClientException;
 @Component
 class RestClientPaymentClient implements PaymentClient {
 
+  private static final String CORRELATION_ID_HEADER = "X-Correlation-Id";
+
   private final RestClient restClient;
 
   RestClientPaymentClient(
@@ -33,11 +35,12 @@ class RestClientPaymentClient implements PaymentClient {
             request.bookingId(), request.userId().value(), request.amount(), request.currency());
 
     log.debug(
-        "Authorizing payment: bookingId={}, userId={}, amount={}, currency={}",
+        "Authorizing payment: bookingId={}, userId={}, amount={}, currency={}, correlationId={}",
         request.bookingId(),
         request.userId(),
         request.amount(),
-        request.currency());
+        request.currency(),
+        request.correlationId());
 
     return execute(
         "authorize payment",
@@ -45,6 +48,7 @@ class RestClientPaymentClient implements PaymentClient {
             restClient
                 .post()
                 .uri("/api/v1/payments/authorize")
+                .header(CORRELATION_ID_HEADER, request.correlationId().toString())
                 .body(httpRequest)
                 .retrieve()
                 .onStatus(
@@ -58,10 +62,11 @@ class RestClientPaymentClient implements PaymentClient {
   }
 
   @Override
-  public PaymentResult approve(UUID paymentId) {
+  public PaymentResult approve(UUID paymentId, UUID correlationId) {
     Objects.requireNonNull(paymentId, "paymentId must not be null");
+    Objects.requireNonNull(correlationId, "correlationId must not be null");
 
-    log.debug("Approving payment: paymentId={}", paymentId);
+    log.debug("Approving payment: paymentId={}, correlationId={}", paymentId, correlationId);
 
     return execute(
         "approve payment",
@@ -69,6 +74,7 @@ class RestClientPaymentClient implements PaymentClient {
             restClient
                 .post()
                 .uri("/api/v1/payments/{paymentId}/approve", paymentId)
+                .header(CORRELATION_ID_HEADER, correlationId.toString())
                 .retrieve()
                 .onStatus(
                     HttpStatusCode::isError,
@@ -80,10 +86,11 @@ class RestClientPaymentClient implements PaymentClient {
   }
 
   @Override
-  public PaymentResult cancel(UUID paymentId) {
+  public PaymentResult cancel(UUID paymentId, UUID correlationId) {
     Objects.requireNonNull(paymentId, "paymentId must not be null");
+    Objects.requireNonNull(correlationId, "correlationId must not be null");
 
-    log.debug("Cancelling payment: paymentId={}", paymentId);
+    log.debug("Cancelling payment: paymentId={}, correlationId={}", paymentId, correlationId);
 
     return execute(
         "cancel payment",
@@ -91,6 +98,7 @@ class RestClientPaymentClient implements PaymentClient {
             restClient
                 .post()
                 .uri("/api/v1/payments/{paymentId}/cancel", paymentId)
+                .header(CORRELATION_ID_HEADER, correlationId.toString())
                 .retrieve()
                 .onStatus(
                     HttpStatusCode::isError,

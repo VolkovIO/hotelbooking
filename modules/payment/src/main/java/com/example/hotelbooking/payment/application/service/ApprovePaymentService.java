@@ -31,6 +31,7 @@ public class ApprovePaymentService {
     PaymentProviderGateway gateway = gatewayRegistry.getGateway(payment.getProvider());
     gateway.approve(payment.getProviderPaymentId());
 
-    return persistenceService.save(payment, PaymentLifecycleEvent.approved(payment));
+    return persistenceService.save(
+        payment, PaymentLifecycleEvent.approved(payment, command.correlationId(), null));
   }
 }

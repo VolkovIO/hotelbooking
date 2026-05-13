@@ -8,7 +8,7 @@ public interface PaymentClient {
 
   PaymentResult authorize(PaymentAuthorizationRequest request);
 
-  PaymentResult approve(UUID paymentId);
+  PaymentResult approve(UUID paymentId, UUID correlationId);
 
-  PaymentResult cancel(UUID paymentId);
+  PaymentResult cancel(UUID paymentId, UUID correlationId);
 }

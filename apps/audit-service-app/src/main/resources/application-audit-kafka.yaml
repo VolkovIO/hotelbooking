@@ -1,0 +1,21 @@
+spring:
+  config:
+    activate:
+      on-profile: audit-kafka
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${AUDIT_KAFKA_GROUP_ID:audit-service}
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    listener:
+      ack-mode: manual
+
+app:
+  audit:
+    kafka:
+      booking-events-topic: ${AUDIT_BOOKING_EVENTS_TOPIC:booking.events}
+      payment-events-topic: ${AUDIT_PAYMENT_EVENTS_TOPIC:payment.events}
+      group-id: ${AUDIT_KAFKA_GROUP_ID:audit-service}

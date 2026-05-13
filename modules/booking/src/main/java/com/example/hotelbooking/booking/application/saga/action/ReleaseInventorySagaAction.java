@@ -65,8 +65,10 @@ public class ReleaseInventorySagaAction implements BookingSagaAction {
 
     booking.cancelHeldBooking();
 
+    UUID correlationId = saga.getId().value();
+
     bookingStateChangePersistenceService.persist(
-        booking, BookingLifecycleEvent.cancelled(booking, previousStatus));
+        booking, BookingLifecycleEvent.cancelled(booking, previousStatus, correlationId, null));
 
     log.info(
         "Inventory hold released by saga compensation: sagaId={}, bookingId={}, holdId={}",
@@ -87,8 +89,10 @@ public class ReleaseInventorySagaAction implements BookingSagaAction {
 
     booking.cancelConfirmedBooking();
 
+    UUID correlationId = saga.getId().value();
+
     bookingStateChangePersistenceService.persist(
-        booking, BookingLifecycleEvent.cancelled(booking, previousStatus));
+        booking, BookingLifecycleEvent.cancelled(booking, previousStatus, correlationId, null));
 
     log.info(
         "Confirmed inventory reservation cancelled by saga compensation: sagaId={}, bookingId={}",

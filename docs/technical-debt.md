@@ -2,7 +2,28 @@
 
 This document tracks known limitations and future improvements for the hotel booking project.
 
-Current milestone: `v0.12.0 — Integration tests + concurrency safety + CI`.
+Current milestone: `v0.13.0 — Event timeline integration`.
+
+## Event Timeline Follow-ups
+
+The current `audit-service` timeline integrates booking and payment events.
+
+Notification events are intentionally not included in the current milestone.
+
+Potential follow-ups:
+
+- publish `notification.events` from `notification-service`
+- project `NotificationCreated`, `NotificationSent`, `NotificationFailed`, and `NotificationSkipped`
+- add explicit saga lifecycle events such as `BookingSagaStarted`, `BookingSagaCompleted`, `BookingSagaCompensated`, and `BookingSagaFailed`
+- propagate `causationId` for command/event and event/event chains
+- add pagination and filtering for the timeline API
+- add user-facing timeline view in a future BFF or demo frontend
+
+Confirmed booking cancellation currently produces `BookingCancelled`, but it does not execute a payment refund/cancellation process.
+
+This is intentionally left for a future milestone because refund/cancellation is a separate business process and should not be mixed into the event timeline foundation.
+
+---
 
 ## Testing and CI
 
@@ -302,19 +323,30 @@ Future improvement:
 
 ## Observability
 
-### 11. Correlation and causation IDs are not fully implemented
+### 11. Correlation and causation IDs are partially implemented
 
-Current events and logs do not yet provide a complete traceable chain across all services.
+Current status:
+
+- booking saga propagates `correlationId` through booking lifecycle events
+- booking-service propagates the same `correlationId` to payment-service through HTTP header `X-Correlation-Id`
+- payment lifecycle events use the propagated `correlationId`
+- audit-service stores and exposes `correlationId` in the booking timeline
+
+Not fully implemented yet:
+
+- `causationId` propagation is still nullable
+- logs are not consistently enriched with `correlationId`
+- gRPC calls do not consistently propagate correlation context
+- error responses do not consistently include correlation context
+- notification-service does not yet publish notification lifecycle events
 
 Future improvement:
 
-- add `correlationId`
-- add `causationId`
+- introduce a request/correlation context abstraction
 - propagate IDs across HTTP, gRPC, Kafka, and logs
-- include IDs in error responses
-- use IDs in audit/event timeline service
-
-This is planned for a future audit/timeline or observability milestone.
+- use `causationId` for command/event and event/event relationships
+- include correlation context in structured logs and error responses
+- integrate notification events into the audit timeline in a focused follow-up PR
 
 ---
 

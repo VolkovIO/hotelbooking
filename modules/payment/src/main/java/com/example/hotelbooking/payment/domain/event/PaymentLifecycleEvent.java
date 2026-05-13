@@ -33,35 +33,41 @@ public record PaymentLifecycleEvent(
     payload = Map.copyOf(payload);
   }
 
-  public static PaymentLifecycleEvent authorized(Payment payment) {
-    return create("PaymentAuthorized", payment);
+  public static PaymentLifecycleEvent authorized(
+      Payment payment, UUID correlationId, UUID causationId) {
+    return create("PaymentAuthorized", payment, correlationId, causationId);
   }
 
-  public static PaymentLifecycleEvent declined(Payment payment) {
-    return create("PaymentDeclined", payment);
+  public static PaymentLifecycleEvent declined(
+      Payment payment, UUID correlationId, UUID causationId) {
+    return create("PaymentDeclined", payment, correlationId, causationId);
   }
 
-  public static PaymentLifecycleEvent approved(Payment payment) {
-    return create("PaymentApproved", payment);
+  public static PaymentLifecycleEvent approved(
+      Payment payment, UUID correlationId, UUID causationId) {
+    return create("PaymentApproved", payment, correlationId, causationId);
   }
 
-  public static PaymentLifecycleEvent cancelled(Payment payment) {
-    return create("PaymentCancelled", payment);
+  public static PaymentLifecycleEvent cancelled(
+      Payment payment, UUID correlationId, UUID causationId) {
+    return create("PaymentCancelled", payment, correlationId, causationId);
   }
 
-  private static PaymentLifecycleEvent create(String eventType, Payment payment) {
-    UUID eventId = UUID.randomUUID();
+  private static PaymentLifecycleEvent create(
+      String eventType, Payment payment, UUID correlationId, UUID causationId) {
+    Objects.requireNonNull(payment, "payment must not be null");
+    Objects.requireNonNull(correlationId, "correlationId must not be null");
 
     return new PaymentLifecycleEvent(
-        eventId,
+        UUID.randomUUID(),
         eventType,
         EVENT_VERSION,
         AGGREGATE_TYPE,
         payment.getId().value(),
         payload(payment),
         Instant.now(),
-        eventId,
-        null);
+        correlationId,
+        causationId);
   }
 
   private static Map<String, Object> payload(Payment payment) {
@@ -83,6 +89,6 @@ public record PaymentLifecycleEvent(
       payload.put("failureReason", payment.getFailureReason().value());
     }
 
-    return payload;
+    return Map.copyOf(payload);
   }
 }

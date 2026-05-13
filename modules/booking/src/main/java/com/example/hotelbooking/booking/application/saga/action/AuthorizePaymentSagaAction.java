@@ -9,6 +9,7 @@ import com.example.hotelbooking.booking.application.saga.BookingSagaFailureReaso
 import com.example.hotelbooking.booking.application.saga.BookingSagaStateException;
 import com.example.hotelbooking.booking.application.saga.BookingSagaStep;
 import com.example.hotelbooking.booking.domain.Booking;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -31,12 +32,15 @@ public class AuthorizePaymentSagaAction implements BookingSagaAction {
   public BookingSaga execute(BookingSaga saga) {
     Booking booking = bookingLoader.load(saga);
 
+    UUID correlationId = saga.getId().value();
+
     PaymentAuthorizationRequest request =
         new PaymentAuthorizationRequest(
             saga.getBookingId(),
             booking.getUserId(),
             saga.getPaymentAmount(),
-            saga.getPaymentCurrency());
+            saga.getPaymentCurrency(),
+            correlationId);
 
     PaymentResult payment = paymentClient.authorize(request);
 

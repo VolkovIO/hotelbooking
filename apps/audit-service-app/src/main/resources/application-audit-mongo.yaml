@@ -1,0 +1,8 @@
+spring:
+  config:
+    activate:
+      on-profile: audit-mongo
+  data:
+    mongodb:
+      uri: ${AUDIT_MONGODB_URI:mongodb://localhost:27017/hotelbooking_audit}
+      auto-index-creation: true
