@@ -15,6 +15,10 @@ final class BookingSecurityRules {
         .requestMatchers(
             "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**", "/v3/api-docs.yaml")
         .permitAll()
+        .requestMatchers("/actuator/health", "/actuator/health/**")
+        .permitAll()
+        .requestMatchers("/actuator/info", "/actuator/metrics", "/actuator/metrics/**")
+        .hasRole("ADMIN")
         .requestMatchers(HttpMethod.POST, "/api/v1/bookings")
         .hasAnyRole("USER", "ADMIN")
         .requestMatchers("/api/v1/bookings/**")

@@ -28,3 +28,19 @@ inventory:
         trust-cert-collection: ${INVENTORY_GRPC_TRUST_CERT_COLLECTION:certs/dev/ca.crt}
       mtls:
         allowed-client-common-name: ${INVENTORY_GRPC_ALLOWED_CLIENT_COMMON_NAME:booking-service}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
