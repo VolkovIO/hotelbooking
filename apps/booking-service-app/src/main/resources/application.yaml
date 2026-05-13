@@ -6,6 +6,13 @@ spring:
       enabled: ALWAYS
   profiles:
     group:
+      dev:
+        - booking-postgres
+        - inventory-grpc-client
+        - security-dev
+        - outbox-publisher
+        - outbox-kafka
+        - booking-saga-springstatemachine-prototype
       local:
         - booking-postgres
         - inventory-grpc-client
@@ -103,3 +110,6 @@ management:
       enabled: true
     readinessstate:
       enabled: true
+
+logging:
+  config: classpath:logback/hotelbooking-logback-spring.xml

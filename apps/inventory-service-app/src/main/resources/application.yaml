@@ -6,7 +6,7 @@ spring:
       enabled: ALWAYS
   profiles:
     group:
-      local:
+      dev:
         - inventory-mongo
         - inventory-grpc-server
         - security-dev
@@ -44,3 +44,6 @@ management:
       enabled: true
     readinessstate:
       enabled: true
+
+logging:
+  config: classpath:logback/hotelbooking-logback-spring.xml

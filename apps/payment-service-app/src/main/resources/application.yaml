@@ -6,10 +6,7 @@ spring:
       enabled: ALWAYS
   profiles:
     group:
-      local:
-        - payment-postgres
-        - payment-dev
-      local-kafka:
+      dev:
         - payment-postgres
         - payment-dev
         - payment-outbox-publisher
@@ -51,3 +48,6 @@ management:
       enabled: true
     readinessstate:
       enabled: true
+
+logging:
+  config: classpath:logback/hotelbooking-logback-spring.xml

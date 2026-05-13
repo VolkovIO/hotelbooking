@@ -6,7 +6,7 @@ spring:
       enabled: ALWAYS
   profiles:
     group:
-      local:
+      dev:
         - audit-mongo
         - audit-kafka
 
@@ -32,3 +32,6 @@ management:
       enabled: true
     readinessstate:
       enabled: true
+
+logging:
+  config: classpath:logback/hotelbooking-logback-spring.xml

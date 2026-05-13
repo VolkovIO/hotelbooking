@@ -6,6 +6,7 @@ plugins {
 dependencies {
     implementation project(':modules:inventory')
     implementation project(':modules:inventory-grpc-api')
+    implementation project(':modules:observability')
 
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'

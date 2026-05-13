@@ -1,0 +1,19 @@
+dependencies {
+    // org.slf4j.MDC
+    implementation 'org.slf4j:slf4j-api'
+
+    // FilterRegistrationBean
+    implementation 'org.springframework.boot:spring-boot'
+
+    // @AutoConfiguration
+    implementation 'org.springframework.boot:spring-boot-autoconfigure'
+
+    // OncePerRequestFilter
+    implementation 'org.springframework:spring-web'
+
+    compileOnly 'jakarta.servlet:jakarta.servlet-api'
+    compileOnly 'ch.qos.logback:logback-classic'
+
+    testImplementation 'jakarta.servlet:jakarta.servlet-api'
+    testImplementation 'ch.qos.logback:logback-classic'
+}
