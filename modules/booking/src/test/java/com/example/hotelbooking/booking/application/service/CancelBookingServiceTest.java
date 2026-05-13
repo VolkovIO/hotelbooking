@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.example.hotelbooking.booking.application.command.CancelBookingCommand;
 import com.example.hotelbooking.booking.application.exception.BookingAccessDeniedException;
+import com.example.hotelbooking.booking.application.port.out.BookingObservabilityContext;
 import com.example.hotelbooking.booking.application.port.out.BookingRepository;
 import com.example.hotelbooking.booking.application.port.out.InventoryReservationPort;
 import com.example.hotelbooking.booking.domain.Booking;
@@ -39,7 +40,10 @@ class CancelBookingServiceTest {
   void setUp() {
     service =
         new CancelBookingService(
-            bookingRepository, inventoryReservationPort, bookingStateChangePersistenceService);
+            bookingRepository,
+            inventoryReservationPort,
+            bookingStateChangePersistenceService,
+            BookingObservabilityContext.noop());
   }
 
   @Test

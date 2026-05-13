@@ -14,6 +14,7 @@ import com.example.hotelbooking.booking.application.payment.PaymentAuthorization
 import com.example.hotelbooking.booking.application.payment.PaymentClientException;
 import com.example.hotelbooking.booking.application.payment.PaymentResult;
 import com.example.hotelbooking.booking.application.payment.PaymentStatus;
+import com.example.hotelbooking.booking.application.port.out.BookingObservabilityContext;
 import com.example.hotelbooking.booking.application.port.out.BookingRepository;
 import com.example.hotelbooking.booking.application.port.out.BookingSagaRepository;
 import com.example.hotelbooking.booking.application.port.out.InventoryReservationPort;
@@ -100,7 +101,9 @@ class BookingSagaProcessManagerTest {
                     bookingStateChangePersistenceService),
                 new CancelBookingSagaAction(sagaRepository)));
 
-    processManager = new BookingSagaProcessManager(sagaRepository, actionRegistry, retryProperties);
+    processManager =
+        new BookingSagaProcessManager(
+            sagaRepository, actionRegistry, retryProperties, BookingObservabilityContext.noop());
 
     when(sagaRepository.save(any(BookingSaga.class)))
         .thenAnswer(invocation -> invocation.getArgument(0));

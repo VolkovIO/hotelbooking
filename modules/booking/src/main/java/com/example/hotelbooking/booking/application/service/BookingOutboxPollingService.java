@@ -2,6 +2,7 @@ package com.example.hotelbooking.booking.application.service;
 
 import com.example.hotelbooking.booking.application.event.BookingOutboxMessage;
 import com.example.hotelbooking.booking.application.exception.BookingOutboxPublicationException;
+import com.example.hotelbooking.booking.application.port.out.BookingObservabilityContext;
 import com.example.hotelbooking.booking.application.port.out.BookingOutboxEventPublisher;
 import com.example.hotelbooking.booking.application.port.out.BookingOutboxRepository;
 import java.time.Duration;
@@ -20,6 +21,7 @@ public class BookingOutboxPollingService {
 
   private final BookingOutboxRepository bookingOutboxRepository;
   private final BookingOutboxEventPublisher bookingOutboxEventPublisher;
+  private final BookingObservabilityContext observabilityContext;
 
   public int publishAvailableMessages(
       int batchSize, int maxAttempts, Duration retryDelay, String lockedBy) {
@@ -41,17 +43,20 @@ public class BookingOutboxPollingService {
 
   private void publishSingleMessage(
       BookingOutboxMessage message, int maxAttempts, Duration retryDelay) {
-    try {
-      bookingOutboxEventPublisher.publish(message);
-      bookingOutboxRepository.markPublished(message.id(), Instant.now());
+    try (BookingObservabilityContext.ContextScope ignored =
+        observabilityContext.openOutboxMessage(message)) {
+      try {
+        bookingOutboxEventPublisher.publish(message);
+        bookingOutboxRepository.markPublished(message.id(), Instant.now());
 
-      log.info(
-          "Booking outbox message published: eventId={}, eventType={}, aggregateId={}",
-          message.id(),
-          message.eventType(),
-          message.aggregateId());
-    } catch (BookingOutboxPublicationException exception) {
-      handlePublishingFailure(message, maxAttempts, retryDelay, exception);
+        log.info(
+            "Booking outbox message published: eventId={}, eventType={}, aggregateId={}",
+            message.id(),
+            message.eventType(),
+            message.aggregateId());
+      } catch (BookingOutboxPublicationException exception) {
+        handlePublishingFailure(message, maxAttempts, retryDelay, exception);
+      }
     }
   }
 

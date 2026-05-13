@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.example.hotelbooking.booking.application.event.BookingOutboxMessage;
 import com.example.hotelbooking.booking.application.exception.BookingOutboxPublicationException;
+import com.example.hotelbooking.booking.application.port.out.BookingObservabilityContext;
 import com.example.hotelbooking.booking.application.port.out.BookingOutboxEventPublisher;
 import com.example.hotelbooking.booking.application.port.out.BookingOutboxRepository;
 import java.time.Duration;
@@ -17,9 +18,9 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -35,7 +36,13 @@ class BookingOutboxPollingServiceTest {
 
   @Mock private BookingOutboxEventPublisher publisher;
 
-  @InjectMocks private BookingOutboxPollingService service;
+  private BookingOutboxPollingService service;
+
+  @BeforeEach
+  void setUp() {
+    service =
+        new BookingOutboxPollingService(repository, publisher, BookingObservabilityContext.noop());
+  }
 
   @Test
   void shouldPublishClaimedMessagesAndMarkThemPublished() throws BookingOutboxPublicationException {
