@@ -19,6 +19,8 @@ The main goal of the project is not to build a commercial booking product, but t
 - service-level integration testing with Testcontainers
 - concurrency safety for finite inventory
 - GitHub Actions CI
+- event timeline read model across booking and payment events
+- cross-service correlation ID propagation
 
 The project is intentionally developed step by step. Each milestone adds one or several architectural concepts and keeps the implementation understandable for learning and interview discussion.
 
@@ -27,27 +29,36 @@ The project is intentionally developed step by step. Each milestone adds one or 
 Current version:
 
 ```text
-v0.12.0 — Integration tests, concurrency safety, and CI
+v0.13.0 — Event timeline integration
 ```
 
-This version adds the first service-level integration tests for critical concurrency scenarios.
+This version adds a booking-oriented event timeline through `audit-service`.
 
-The main focus is last room contention:
+The goal is not to implement a legal audit log. The goal is to provide a read model that makes the distributed booking flow observable and explainable.
+
+The timeline answers a practical question:
 
 ```text
-many clients try to book the same last available room concurrently
+What happened to this booking?
 ```
 
-Expected behavior:
+The current implementation consumes events from:
+
+- `booking.events`
+- `payment.events`
+
+For a successful booking saga, the timeline shows:
 
 ```text
-exactly one client wins
-no over-holding is possible
-only one booking is confirmed
-competing bookings are rejected or failed safely
+BookingPlacedOnHold
+PaymentAuthorized
+BookingConfirmed
+PaymentApproved
 ```
 
-This milestone also adds GitHub Actions CI so that Gradle checks run automatically for pull requests and pushes to `master`.
+Events produced by the same booking saga share the same `correlationId`. In the current implementation, the saga id is used as the correlation id for the distributed booking/payment flow.
+
+Manual booking cancellation is treated as a separate business flow and therefore receives its own `correlationId`.
 
 ## Architecture focus
 
@@ -124,6 +135,24 @@ Responsible for:
 
 Real Telegram and Max sender adapters are intentionally not implemented yet. For this educational project, logging sender is enough to verify the full flow.
 
+### Audit service
+
+Responsible for:
+
+- consuming booking lifecycle events from Kafka
+- consuming payment lifecycle events from Kafka
+- projecting events into a MongoDB booking timeline read model
+- storing timeline events idempotently by `eventId`
+- exposing the booking timeline API
+
+Timeline API:
+
+```http
+GET /api/v1/bookings/{bookingId}/timeline
+```
+
+The audit-service groups events by `bookingId` and keeps the original `aggregateType` / `aggregateId` so that booking and payment events can be displayed in one timeline without losing their source aggregate identity.
+
 ## Local infrastructure
 
 The project uses Docker Compose for local infrastructure.
@@ -189,6 +218,44 @@ More details are documented in:
 ```text
 docs/booking-saga.md
 docs/workflow-engine-comparison.md
+```
+
+## Event timeline integration
+
+`audit-service` provides a booking-oriented read model for distributed booking flows.
+
+It consumes events from Kafka and stores them in MongoDB as timeline events. The read model is intentionally separate from the business transaction path: booking and payment services continue to own their data, while audit-service builds a query-optimized projection.
+
+Current event sources:
+
+- `booking.events`
+- `payment.events`
+
+Current timeline events:
+
+- `BookingPlacedOnHold`
+- `BookingConfirmed`
+- `BookingCancelled`
+- `PaymentAuthorized`
+- `PaymentDeclined`
+- `PaymentApproved`
+- `PaymentCancelled`
+
+Example happy path:
+
+```text
+BookingPlacedOnHold   correlationId = saga-id
+PaymentAuthorized     correlationId = saga-id
+BookingConfirmed      correlationId = saga-id
+PaymentApproved       correlationId = saga-id
+```
+
+Manual cancellation after a confirmed booking is a separate user command and is expected to have a different `correlationId`.
+
+More details:
+
+```text
+docs/audit-timeline.md
 ```
 
 ## Integration testing and concurrency safety
@@ -395,6 +462,7 @@ Examples of conscious trade-offs:
 - Spring Statemachine is introduced as a prototype, not as a replacement for the main flow
 - Temporal is compared in documentation, not added as infrastructure yet
 - booking-level contention test uses inventory/payment doubles instead of full multi-service e2e infrastructure
+- notification events are intentionally left out of the event timeline milestone to keep the integration slice focused
 
 This keeps the project understandable and useful for interview discussion.
 
@@ -413,10 +481,13 @@ Completed milestones include:
 - inventory concurrency safety with atomic hold reservation
 - service-level integration tests with Testcontainers
 - GitHub Actions CI
+- event timeline read model across booking and payment events
+- cross-service correlation ID propagation
 
 Possible future milestones:
 
-- audit/event timeline service with correlation and causation IDs
+- notification events in booking timeline
+- explicit saga lifecycle events and causation IDs
 - observability with structured logs, metrics, tracing, and optional centralized logging
 - load testing with k6
 - stronger idempotency and reconciliation for unknown outcomes
