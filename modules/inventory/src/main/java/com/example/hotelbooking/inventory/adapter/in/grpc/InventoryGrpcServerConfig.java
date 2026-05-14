@@ -1,15 +1,21 @@
 package com.example.hotelbooking.inventory.adapter.in.grpc;
 
+import io.grpc.BindableService;
 import io.grpc.Server;
 import io.grpc.ServerBuilder;
+import io.grpc.ServerInterceptor;
 import io.grpc.ServerInterceptors;
+import io.grpc.ServerServiceDefinition;
 import io.grpc.netty.shaded.io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.shaded.io.grpc.netty.NettyServerBuilder;
 import io.grpc.netty.shaded.io.netty.handler.ssl.ClientAuth;
 import io.grpc.netty.shaded.io.netty.handler.ssl.SslContext;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 import javax.net.ssl.SSLException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,6 +30,7 @@ public class InventoryGrpcServerConfig {
   Server inventoryGrpcServer(
       InventoryQueryGrpcService inventoryQueryGrpcService,
       InventoryReservationGrpcService inventoryReservationGrpcService,
+      ObjectProvider<ServerInterceptor> grpcServerInterceptors,
       @Value("${inventory.grpc.server.port}") int port,
       @Value("${inventory.grpc.server.tls.enabled:false}") boolean tlsEnabled,
       @Value("${inventory.grpc.server.tls.certificate-chain:}") String certificateChainPath,
@@ -38,15 +45,21 @@ public class InventoryGrpcServerConfig {
         tlsEnabled,
         allowedClientCommonName);
 
+    List<ServerInterceptor> interceptors = grpcServerInterceptors.orderedStream().toList();
+
     if (!tlsEnabled) {
+      log.info("Configuring inventory gRPC server interceptors: count={}", interceptors.size());
+
       return ServerBuilder.forPort(port)
-          .addService(inventoryQueryGrpcService)
-          .addService(inventoryReservationGrpcService)
+          .addService(intercept(inventoryQueryGrpcService, interceptors))
+          .addService(intercept(inventoryReservationGrpcService, interceptors))
           .build();
     }
 
-    InventoryGrpcServiceIdentityInterceptor serviceIdentityInterceptor =
-        new InventoryGrpcServiceIdentityInterceptor(allowedClientCommonName);
+    List<ServerInterceptor> tlsInterceptors = new ArrayList<>(interceptors);
+    tlsInterceptors.add(new InventoryGrpcServiceIdentityInterceptor(allowedClientCommonName));
+
+    log.info("Configuring inventory gRPC server interceptors: count={}", tlsInterceptors.size());
 
     SslContext sslContext =
         GrpcSslContexts.forServer(
@@ -58,12 +71,18 @@ public class InventoryGrpcServerConfig {
 
     return NettyServerBuilder.forPort(port)
         .sslContext(sslContext)
-        .addService(
-            ServerInterceptors.intercept(inventoryQueryGrpcService, serviceIdentityInterceptor))
-        .addService(
-            ServerInterceptors.intercept(
-                inventoryReservationGrpcService, serviceIdentityInterceptor))
+        .addService(intercept(inventoryQueryGrpcService, tlsInterceptors))
+        .addService(intercept(inventoryReservationGrpcService, tlsInterceptors))
         .build();
+  }
+
+  private ServerServiceDefinition intercept(
+      BindableService service, List<ServerInterceptor> interceptors) {
+    if (interceptors.isEmpty()) {
+      return service.bindService();
+    }
+
+    return ServerInterceptors.intercept(service, interceptors);
   }
 
   private File requiredFile(String path, String description) {

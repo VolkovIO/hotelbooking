@@ -62,20 +62,40 @@ public final class ObservabilityContext implements AutoCloseable {
       return putUuid(CORRELATION_ID, value);
     }
 
+    public Builder correlationId(String value) {
+      return put(CORRELATION_ID, value);
+    }
+
     public Builder sagaId(UUID value) {
       return putUuid(SAGA_ID, value);
+    }
+
+    public Builder sagaId(String value) {
+      return put(SAGA_ID, value);
     }
 
     public Builder bookingId(UUID value) {
       return putUuid(BOOKING_ID, value);
     }
 
+    public Builder bookingId(String value) {
+      return put(BOOKING_ID, value);
+    }
+
     public Builder paymentId(UUID value) {
       return putUuid(PAYMENT_ID, value);
     }
 
+    public Builder paymentId(String value) {
+      return put(PAYMENT_ID, value);
+    }
+
     public Builder eventId(UUID value) {
       return putUuid(EVENT_ID, value);
+    }
+
+    public Builder eventId(String value) {
+      return put(EVENT_ID, value);
     }
 
     public Builder eventType(String value) {
