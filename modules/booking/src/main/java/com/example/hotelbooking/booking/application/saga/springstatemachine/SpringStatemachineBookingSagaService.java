@@ -2,6 +2,7 @@ package com.example.hotelbooking.booking.application.saga.springstatemachine;
 
 import static com.example.hotelbooking.booking.application.saga.springstatemachine.SpringStatemachineBookingSagaEvent.NEXT;
 
+import com.example.hotelbooking.booking.application.port.out.BookingObservabilityContext;
 import com.example.hotelbooking.booking.application.port.out.BookingSagaRepository;
 import com.example.hotelbooking.booking.application.saga.BookingSaga;
 import com.example.hotelbooking.booking.application.saga.BookingSagaFailureReason;
@@ -31,6 +32,7 @@ public class SpringStatemachineBookingSagaService {
   private final StateMachineFactory<
           SpringStatemachineBookingSagaState, SpringStatemachineBookingSagaEvent>
       stateMachineFactory;
+  private final BookingObservabilityContext observabilityContext;
 
   public BookingSaga process(BookingSagaId sagaId) {
     Objects.requireNonNull(sagaId, "sagaId must not be null");
@@ -38,6 +40,12 @@ public class SpringStatemachineBookingSagaService {
     BookingSaga saga =
         sagaRepository.findById(sagaId).orElseThrow(() -> new BookingSagaNotFoundException(sagaId));
 
+    try (BookingObservabilityContext.ContextScope ignored = observabilityContext.openSaga(saga)) {
+      return processWithContext(saga);
+    }
+  }
+
+  private BookingSaga processWithContext(BookingSaga saga) {
     StateMachine<SpringStatemachineBookingSagaState, SpringStatemachineBookingSagaEvent>
         stateMachine = stateMachineFactory.getStateMachine(saga.getId().value().toString());
 
