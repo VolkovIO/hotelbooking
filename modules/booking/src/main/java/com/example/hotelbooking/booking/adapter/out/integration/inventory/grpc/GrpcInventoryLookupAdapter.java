@@ -5,10 +5,13 @@ import com.example.hotelbooking.booking.application.port.out.RoomTypeReference;
 import com.example.hotelbooking.inventory.grpc.v1.FindRoomTypeReferenceRequest;
 import com.example.hotelbooking.inventory.grpc.v1.InventoryQueryServiceGrpc;
 import io.grpc.StatusRuntimeException;
+import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
@@ -20,20 +23,25 @@ final class GrpcInventoryLookupAdapter implements InventoryLookupPort {
 
   private final InventoryQueryServiceGrpc.InventoryQueryServiceBlockingStub inventoryQueryStub;
 
+  @Value("${inventory.grpc.client.deadline:PT3S}")
+  private Duration deadline;
+
   @Override
   public Optional<RoomTypeReference> findRoomTypeReference(UUID hotelId, UUID roomTypeId) {
     log.debug(
-        "Calling inventory gRPC FindRoomTypeReference: hotelId={}, roomTypeId={}",
+        "Calling inventory gRPC FindRoomTypeReference: hotelId={}, roomTypeId={}, deadline={}",
         hotelId,
-        roomTypeId);
+        roomTypeId,
+        deadline);
 
     try {
       var response =
-          inventoryQueryStub.findRoomTypeReference(
-              FindRoomTypeReferenceRequest.newBuilder()
-                  .setHotelId(hotelId.toString())
-                  .setRoomTypeId(roomTypeId.toString())
-                  .build());
+          queryStubWithDeadline()
+              .findRoomTypeReference(
+                  FindRoomTypeReferenceRequest.newBuilder()
+                      .setHotelId(hotelId.toString())
+                      .setRoomTypeId(roomTypeId.toString())
+                      .build());
 
       if (!response.getFound()) {
         log.debug(
@@ -74,5 +82,9 @@ final class GrpcInventoryLookupAdapter implements InventoryLookupPort {
 
       throw BookingInventoryGrpcExceptionMapper.technicalFailure(operation, exception);
     }
+  }
+
+  private InventoryQueryServiceGrpc.InventoryQueryServiceBlockingStub queryStubWithDeadline() {
+    return inventoryQueryStub.withDeadlineAfter(deadline.toMillis(), TimeUnit.MILLISECONDS);
   }
 }

@@ -64,6 +64,7 @@ inventory:
     client:
       host: localhost
       port: 9090
+      deadline: ${INVENTORY_GRPC_CLIENT_DEADLINE:PT3S}
       tls:
         enabled: ${INVENTORY_GRPC_CLIENT_TLS_ENABLED:true}
         certificate-chain: ${INVENTORY_GRPC_CLIENT_CERTIFICATE_CHAIN:certs/dev/booking-service.crt}
