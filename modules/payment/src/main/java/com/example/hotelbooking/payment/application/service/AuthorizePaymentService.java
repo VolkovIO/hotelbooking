@@ -1,6 +1,7 @@
 package com.example.hotelbooking.payment.application.service;
 
 import com.example.hotelbooking.payment.application.command.AuthorizePaymentCommand;
+import com.example.hotelbooking.payment.application.port.out.PaymentObservabilityContext;
 import com.example.hotelbooking.payment.application.port.out.PaymentRepository;
 import com.example.hotelbooking.payment.application.provider.PaymentProviderAuthorizationRequest;
 import com.example.hotelbooking.payment.application.provider.PaymentProviderAuthorizationResult;
@@ -23,13 +24,17 @@ public class AuthorizePaymentService {
   private final PaymentRepository paymentRepository;
   private final PaymentProviderGatewayRegistry gatewayRegistry;
   private final PaymentStateChangePersistenceService persistenceService;
+  private final PaymentObservabilityContext observabilityContext;
 
   public Payment authorize(AuthorizePaymentCommand command) {
     BookingId bookingId = new BookingId(command.bookingId());
 
-    return paymentRepository
-        .findByBookingId(bookingId)
-        .orElseGet(() -> authorizeNewPayment(command, bookingId));
+    try (PaymentObservabilityContext.ContextScope ignored =
+        observabilityContext.openBooking(command.correlationId(), bookingId)) {
+      return paymentRepository
+          .findByBookingId(bookingId)
+          .orElseGet(() -> authorizeNewPayment(command, bookingId));
+    }
   }
 
   private Payment authorizeNewPayment(AuthorizePaymentCommand command, BookingId bookingId) {
@@ -41,25 +46,28 @@ public class AuthorizePaymentService {
             new PaymentCurrency(command.currency()),
             PaymentProvider.FAKE);
 
-    PaymentProviderGateway gateway = gatewayRegistry.getGateway(payment.getProvider());
-    PaymentProviderAuthorizationResult result =
-        gateway.authorize(
-            new PaymentProviderAuthorizationRequest(
-                payment.getBookingId(),
-                payment.getUserId(),
-                payment.getAmount(),
-                payment.getCurrency()));
+    try (PaymentObservabilityContext.ContextScope ignored =
+        observabilityContext.openPayment(command.correlationId(), payment)) {
+      PaymentProviderGateway gateway = gatewayRegistry.getGateway(payment.getProvider());
+      PaymentProviderAuthorizationResult result =
+          gateway.authorize(
+              new PaymentProviderAuthorizationRequest(
+                  payment.getBookingId(),
+                  payment.getUserId(),
+                  payment.getAmount(),
+                  payment.getCurrency()));
 
-    if (result.authorized()) {
-      payment.markAuthorized(result.providerPaymentId());
+      if (result.authorized()) {
+        payment.markAuthorized(result.providerPaymentId());
+
+        return persistenceService.save(
+            payment, PaymentLifecycleEvent.authorized(payment, command.correlationId(), null));
+      }
+
+      payment.markDeclined(result.failureReason());
 
       return persistenceService.save(
-          payment, PaymentLifecycleEvent.authorized(payment, command.correlationId(), null));
+          payment, PaymentLifecycleEvent.declined(payment, command.correlationId(), null));
     }
-
-    payment.markDeclined(result.failureReason());
-
-    return persistenceService.save(
-        payment, PaymentLifecycleEvent.declined(payment, command.correlationId(), null));
   }
 }

@@ -1,14 +1,13 @@
 package com.example.hotelbooking.payment.application.outbox;
 
+import com.example.hotelbooking.payment.application.port.out.PaymentObservabilityContext;
 import com.example.hotelbooking.payment.application.port.out.PaymentOutboxRepository;
 import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
-@Slf4j
 @Service
 @Profile("payment-outbox-publisher")
 @RequiredArgsConstructor
@@ -19,6 +18,7 @@ public class PaymentOutboxPollingService {
   private final PaymentOutboxRepository paymentOutboxRepository;
   private final PaymentOutboxEventPublisher paymentOutboxEventPublisher;
   private final PaymentOutboxPollingProperties properties;
+  private final PaymentObservabilityContext observabilityContext;
 
   public int publishPendingMessages() {
     List<PaymentOutboxMessage> messages =
@@ -30,11 +30,14 @@ public class PaymentOutboxPollingService {
   }
 
   private void publishMessage(PaymentOutboxMessage message) {
-    try {
-      paymentOutboxEventPublisher.publish(message);
-      paymentOutboxRepository.markPublished(message.eventId(), Instant.now());
-    } catch (PaymentOutboxPublicationException exception) {
-      handlePublicationFailure(message, exception);
+    try (PaymentObservabilityContext.ContextScope ignored =
+        observabilityContext.openOutboxMessage(message)) {
+      try {
+        paymentOutboxEventPublisher.publish(message);
+        paymentOutboxRepository.markPublished(message.eventId(), Instant.now());
+      } catch (PaymentOutboxPublicationException exception) {
+        handlePublicationFailure(message, exception);
+      }
     }
   }
 

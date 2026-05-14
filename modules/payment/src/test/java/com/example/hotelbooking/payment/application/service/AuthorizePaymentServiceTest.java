@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.example.hotelbooking.payment.application.command.AuthorizePaymentCommand;
+import com.example.hotelbooking.payment.application.port.out.PaymentObservabilityContext;
 import com.example.hotelbooking.payment.application.port.out.PaymentRepository;
 import com.example.hotelbooking.payment.application.provider.PaymentProviderAuthorizationRequest;
 import com.example.hotelbooking.payment.application.provider.PaymentProviderAuthorizationResult;
@@ -124,7 +125,8 @@ class AuthorizePaymentServiceTest {
   }
 
   private AuthorizePaymentService newService() {
-    return new AuthorizePaymentService(paymentRepository, gatewayRegistry, persistenceService);
+    return new AuthorizePaymentService(
+        paymentRepository, gatewayRegistry, persistenceService, PaymentObservabilityContext.noop());
   }
 
   private AuthorizePaymentCommand command() {

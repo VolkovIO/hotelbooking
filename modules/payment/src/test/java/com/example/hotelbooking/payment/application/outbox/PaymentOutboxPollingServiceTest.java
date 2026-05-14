@@ -6,6 +6,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.example.hotelbooking.payment.application.port.out.PaymentObservabilityContext;
 import com.example.hotelbooking.payment.application.port.out.PaymentOutboxRepository;
 import java.time.Duration;
 import java.time.Instant;
@@ -94,7 +95,10 @@ class PaymentOutboxPollingServiceTest {
 
   private PaymentOutboxPollingService newService(PaymentOutboxPollingProperties properties) {
     return new PaymentOutboxPollingService(
-        paymentOutboxRepository, paymentOutboxEventPublisher, properties);
+        paymentOutboxRepository,
+        paymentOutboxEventPublisher,
+        properties,
+        PaymentObservabilityContext.noop());
   }
 
   private PaymentOutboxPollingProperties properties() {
