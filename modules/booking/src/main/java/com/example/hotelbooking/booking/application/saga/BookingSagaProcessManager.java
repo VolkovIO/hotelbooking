@@ -3,11 +3,13 @@ package com.example.hotelbooking.booking.application.saga;
 import com.example.hotelbooking.booking.application.exception.InventoryReservationException;
 import com.example.hotelbooking.booking.application.exception.RoomHoldFailedException;
 import com.example.hotelbooking.booking.application.payment.PaymentClientException;
+import com.example.hotelbooking.booking.application.port.out.BookingMetrics;
 import com.example.hotelbooking.booking.application.port.out.BookingObservabilityContext;
 import com.example.hotelbooking.booking.application.port.out.BookingSagaRepository;
 import com.example.hotelbooking.booking.application.saga.action.BookingSagaActionRegistry;
 import com.example.hotelbooking.booking.domain.BookingDomainException;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,11 +22,15 @@ import org.springframework.stereotype.Service;
 public class BookingSagaProcessManager {
 
   private static final int MAX_STEPS_PER_RUN = 20;
+  private static final String IMPLEMENTATION = "handmade";
+  private static final String OUTCOME_FAILED = "failed";
+  private static final String OUTCOME_WAITING_RETRY = "waiting_retry";
 
   private final BookingSagaRepository sagaRepository;
   private final BookingSagaActionRegistry actionRegistry;
   private final BookingSagaRetryProperties retryProperties;
   private final BookingObservabilityContext observabilityContext;
+  private final BookingMetrics bookingMetrics;
 
   public BookingSaga process(BookingSagaId sagaId) {
     Objects.requireNonNull(sagaId, "sagaId must not be null");
@@ -56,6 +62,8 @@ public class BookingSagaProcessManager {
 
     while (!currentSaga.isFinished() && currentSaga.getCurrentStep() != BookingSagaStep.COMPLETE) {
       if (executedSteps >= MAX_STEPS_PER_RUN) {
+        bookingMetrics.sagaProcessed(IMPLEMENTATION, OUTCOME_FAILED);
+
         throw new BookingSagaStateException(
             "Booking saga exceeded maximum steps per run: sagaId=" + currentSaga.getId().value());
       }
@@ -83,6 +91,8 @@ public class BookingSagaProcessManager {
         currentSaga.getStatus(),
         currentSaga.getCurrentStep());
 
+    bookingMetrics.sagaProcessed(IMPLEMENTATION, outcome(currentSaga));
+
     return currentSaga;
   }
 
@@ -94,6 +104,9 @@ public class BookingSagaProcessManager {
 
       saga.scheduleRetry(reason, nextAttemptAt);
       sagaRepository.save(saga);
+
+      bookingMetrics.sagaRetryScheduled(IMPLEMENTATION);
+      bookingMetrics.sagaProcessed(IMPLEMENTATION, OUTCOME_WAITING_RETRY);
 
       log.warn(
           "Booking saga step failed, retry scheduled: "
@@ -129,6 +142,8 @@ public class BookingSagaProcessManager {
     saga.markFailed(reason);
     sagaRepository.save(saga);
 
+    bookingMetrics.sagaProcessed(IMPLEMENTATION, OUTCOME_FAILED);
+
     log.warn(
         "Booking saga retries exhausted, marking saga as failed: "
             + "sagaId={}, bookingId={}, currentStep={}, retryCount={}, reason={}",
@@ -145,6 +160,8 @@ public class BookingSagaProcessManager {
 
     saga.markFailed(reason);
     sagaRepository.save(saga);
+
+    bookingMetrics.sagaProcessed(IMPLEMENTATION, OUTCOME_FAILED);
 
     log.warn(
         "Booking saga step failed without retry: "
@@ -185,5 +202,9 @@ public class BookingSagaProcessManager {
     }
 
     return new BookingSagaFailureReason(message + ": " + cause.getMessage());
+  }
+
+  private String outcome(BookingSaga saga) {
+    return saga.getStatus().name().toLowerCase(Locale.ROOT);
   }
 }

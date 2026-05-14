@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import com.example.hotelbooking.booking.application.event.BookingOutboxMessage;
 import com.example.hotelbooking.booking.application.exception.BookingOutboxPublicationException;
+import com.example.hotelbooking.booking.application.port.out.BookingMetrics;
 import com.example.hotelbooking.booking.application.port.out.BookingObservabilityContext;
 import com.example.hotelbooking.booking.application.port.out.BookingOutboxEventPublisher;
 import com.example.hotelbooking.booking.application.port.out.BookingOutboxRepository;
@@ -41,7 +42,8 @@ class BookingOutboxPollingServiceTest {
   @BeforeEach
   void setUp() {
     service =
-        new BookingOutboxPollingService(repository, publisher, BookingObservabilityContext.noop());
+        new BookingOutboxPollingService(
+            repository, publisher, BookingObservabilityContext.noop(), BookingMetrics.noop());
   }
 
   @Test
