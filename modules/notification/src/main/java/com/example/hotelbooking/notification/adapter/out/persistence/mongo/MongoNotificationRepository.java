@@ -131,6 +131,8 @@ class MongoNotificationRepository implements NotificationRepository {
     return new Update()
         .set("sourceEventId", notification.getSourceEventId().value().toString())
         .set("sourceEventType", notification.getSourceEventType().value())
+        .set("sourceAggregateId", notification.getSourceAggregateId().value().toString())
+        .set("sourceCorrelationId", notification.getSourceCorrelationId().value().toString())
         .set("type", notification.getType().name())
         .set("userId", notification.getUserId().value().toString())
         .set("channel", notification.getChannel().name())

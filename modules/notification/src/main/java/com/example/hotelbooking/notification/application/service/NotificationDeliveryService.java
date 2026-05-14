@@ -1,5 +1,6 @@
 package com.example.hotelbooking.notification.application.service;
 
+import com.example.hotelbooking.notification.application.port.out.NotificationObservabilityContext;
 import com.example.hotelbooking.notification.application.port.out.NotificationRepository;
 import com.example.hotelbooking.notification.application.port.out.NotificationSender;
 import com.example.hotelbooking.notification.application.sender.NotificationMessage;
@@ -21,6 +22,7 @@ public class NotificationDeliveryService {
   private final NotificationRepository notificationRepository;
   private final NotificationSenderRegistry senderRegistry;
   private final NotificationDeliveryProperties properties;
+  private final NotificationObservabilityContext observabilityContext;
 
   public int deliverPending(String lockedBy) {
     Instant now = Instant.now();
@@ -36,15 +38,18 @@ public class NotificationDeliveryService {
   }
 
   private void deliverOne(Notification notification, String lockedBy) {
-    try {
-      NotificationSender sender = senderRegistry.getSender(notification.getChannel());
-      SendNotificationResult result = sender.send(NotificationMessage.from(notification));
-      applySendResult(notification, result);
-    } catch (NotificationSenderNotFoundException exception) {
-      applyFailure(notification, exception.getMessage());
-    }
+    try (NotificationObservabilityContext.ContextScope ignored =
+        observabilityContext.openNotificationDelivery(notification)) {
+      try {
+        NotificationSender sender = senderRegistry.getSender(notification.getChannel());
+        SendNotificationResult result = sender.send(NotificationMessage.from(notification));
+        applySendResult(notification, result);
+      } catch (NotificationSenderNotFoundException exception) {
+        applyFailure(notification, exception.getMessage());
+      }
 
-    notificationRepository.saveClaimed(notification, lockedBy);
+      notificationRepository.saveClaimed(notification, lockedBy);
+    }
   }
 
   private void applySendResult(Notification notification, SendNotificationResult result) {

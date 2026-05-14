@@ -29,6 +29,8 @@ class NotificationTest {
     assertNull(notification.getSentAt());
     assertNull(notification.getLastError());
     assertTrue(notification.isPending());
+    assertNotNull(notification.getSourceAggregateId());
+    assertNotNull(notification.getSourceCorrelationId());
   }
 
   @Test
@@ -74,6 +76,8 @@ class NotificationTest {
         Notification.skipped(
             new SourceEventId(UUID.randomUUID()),
             new SourceEventType(SOURCE_EVENT_TYPE),
+            new SourceAggregateId(UUID.randomUUID()),
+            new SourceCorrelationId(UUID.randomUUID()),
             NotificationType.BOOKING_CONFIRMED,
             new NotificationUserId(UUID.randomUUID()),
             new NotificationSubject(SUBJECT),
@@ -99,6 +103,8 @@ class NotificationTest {
                 NotificationId.newId(),
                 new SourceEventId(UUID.randomUUID()),
                 new SourceEventType(SOURCE_EVENT_TYPE),
+                new SourceAggregateId(UUID.randomUUID()),
+                new SourceCorrelationId(UUID.randomUUID()),
                 NotificationType.BOOKING_CONFIRMED,
                 new NotificationUserId(UUID.randomUUID()),
                 NotificationChannel.EMAIL,
@@ -125,6 +131,8 @@ class NotificationTest {
                 NotificationId.newId(),
                 new SourceEventId(UUID.randomUUID()),
                 new SourceEventType(SOURCE_EVENT_TYPE),
+                new SourceAggregateId(UUID.randomUUID()),
+                new SourceCorrelationId(UUID.randomUUID()),
                 NotificationType.BOOKING_CONFIRMED,
                 new NotificationUserId(UUID.randomUUID()),
                 NotificationChannel.EMAIL,
@@ -182,6 +190,8 @@ class NotificationTest {
     return Notification.pending(
         new SourceEventId(UUID.randomUUID()),
         new SourceEventType(SOURCE_EVENT_TYPE),
+        new SourceAggregateId(UUID.randomUUID()),
+        new SourceCorrelationId(UUID.randomUUID()),
         NotificationType.BOOKING_CONFIRMED,
         new NotificationUserId(UUID.randomUUID()),
         NotificationChannel.EMAIL,

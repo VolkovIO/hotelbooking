@@ -18,6 +18,8 @@ public final class Notification {
   private final NotificationId id;
   private final SourceEventId sourceEventId;
   private final SourceEventType sourceEventType;
+  private final SourceAggregateId sourceAggregateId;
+  private final SourceCorrelationId sourceCorrelationId;
   private final NotificationType type;
   private final NotificationUserId userId;
   private final NotificationChannel channel;
@@ -36,6 +38,8 @@ public final class Notification {
       NotificationId id,
       SourceEventId sourceEventId,
       SourceEventType sourceEventType,
+      SourceAggregateId sourceAggregateId,
+      SourceCorrelationId sourceCorrelationId,
       NotificationType type,
       NotificationUserId userId,
       NotificationChannel channel,
@@ -53,6 +57,10 @@ public final class Notification {
     this.sourceEventId = Objects.requireNonNull(sourceEventId, "sourceEventId must not be null");
     this.sourceEventType =
         Objects.requireNonNull(sourceEventType, "sourceEventType must not be null");
+    this.sourceAggregateId =
+        Objects.requireNonNull(sourceAggregateId, "sourceAggregateId must not be null");
+    this.sourceCorrelationId =
+        Objects.requireNonNull(sourceCorrelationId, "sourceCorrelationId must not be null");
     this.type = Objects.requireNonNull(type, "type must not be null");
     this.userId = Objects.requireNonNull(userId, "userId must not be null");
     this.channel = Objects.requireNonNull(channel, "channel must not be null");
@@ -73,6 +81,8 @@ public final class Notification {
   public static Notification pending(
       SourceEventId sourceEventId,
       SourceEventType sourceEventType,
+      SourceAggregateId sourceAggregateId,
+      SourceCorrelationId sourceCorrelationId,
       NotificationType type,
       NotificationUserId userId,
       NotificationChannel channel,
@@ -85,6 +95,8 @@ public final class Notification {
         NotificationId.newId(),
         sourceEventId,
         sourceEventType,
+        sourceAggregateId,
+        sourceCorrelationId,
         type,
         userId,
         channel,
@@ -103,6 +115,8 @@ public final class Notification {
   public static Notification skipped(
       SourceEventId sourceEventId,
       SourceEventType sourceEventType,
+      SourceAggregateId sourceAggregateId,
+      SourceCorrelationId sourceCorrelationId,
       NotificationType type,
       NotificationUserId userId,
       NotificationSubject subject,
@@ -114,6 +128,8 @@ public final class Notification {
         NotificationId.newId(),
         sourceEventId,
         sourceEventType,
+        sourceAggregateId,
+        sourceCorrelationId,
         type,
         userId,
         NotificationChannel.EMAIL,
@@ -133,6 +149,8 @@ public final class Notification {
       NotificationId id,
       SourceEventId sourceEventId,
       SourceEventType sourceEventType,
+      SourceAggregateId sourceAggregateId,
+      SourceCorrelationId sourceCorrelationId,
       NotificationType type,
       NotificationUserId userId,
       NotificationChannel channel,
@@ -150,6 +168,8 @@ public final class Notification {
         id,
         sourceEventId,
         sourceEventType,
+        sourceAggregateId,
+        sourceCorrelationId,
         type,
         userId,
         channel,
