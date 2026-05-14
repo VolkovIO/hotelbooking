@@ -3,6 +3,7 @@ package com.example.hotelbooking.notification.adapter.in.kafka;
 import com.example.hotelbooking.notification.application.event.BookingEventEnvelope;
 import com.example.hotelbooking.notification.application.event.BookingEventHandlingResult;
 import com.example.hotelbooking.notification.application.event.BookingEventRejectedException;
+import com.example.hotelbooking.notification.application.port.out.NotificationObservabilityContext;
 import com.example.hotelbooking.notification.application.service.BookingEventNotificationService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,18 +23,16 @@ class BookingEventsKafkaConsumer {
 
   private final ObjectMapper objectMapper;
   private final BookingEventNotificationService notificationService;
+  private final NotificationObservabilityContext observabilityContext;
 
   @KafkaListener(
       topics = "${app.notification.kafka.booking-events-topic}",
       groupId = "${app.notification.kafka.group-id}")
   public void consume(ConsumerRecord<String, String> record, Acknowledgment acknowledgment) {
-    try {
-      BookingEventEnvelope event =
-          objectMapper.readValue(record.value(), BookingEventEnvelope.class);
-      BookingEventHandlingResult result = notificationService.handle(event);
+    BookingEventEnvelope event;
 
-      logProcessedEvent(record, event, result);
-      acknowledgment.acknowledge();
+    try {
+      event = objectMapper.readValue(record.value(), BookingEventEnvelope.class);
     } catch (JsonProcessingException exception) {
       log.warn(
           "Skipping malformed booking event: topic={}, partition={}, offset={}",
@@ -41,14 +40,28 @@ class BookingEventsKafkaConsumer {
           record.partition(),
           record.offset(),
           exception);
+
       acknowledgment.acknowledge();
-    } catch (BookingEventRejectedException exception) {
-      log.warn(
-          "Skipping rejected booking event: topic={}, partition={}, offset={}, reason={}",
-          record.topic(),
-          record.partition(),
-          record.offset(),
-          exception.getMessage());
+      return;
+    }
+
+    try (NotificationObservabilityContext.ContextScope ignored =
+        observabilityContext.openBookingEvent(event)) {
+      try {
+        BookingEventHandlingResult result = notificationService.handle(event);
+
+        logProcessedEvent(record, event, result);
+      } catch (BookingEventRejectedException exception) {
+        log.warn(
+            "Skipping rejected booking event: topic={}, partition={}, offset={}, eventId={}, eventType={}, reason={}",
+            record.topic(),
+            record.partition(),
+            record.offset(),
+            event.eventId(),
+            event.eventType(),
+            exception.getMessage());
+      }
+
       acknowledgment.acknowledge();
     }
   }

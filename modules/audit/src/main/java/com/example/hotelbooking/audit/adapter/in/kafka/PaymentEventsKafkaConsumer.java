@@ -2,6 +2,7 @@ package com.example.hotelbooking.audit.adapter.in.kafka;
 
 import com.example.hotelbooking.audit.application.event.PaymentEventEnvelope;
 import com.example.hotelbooking.audit.application.event.TimelineEventHandlingResult;
+import com.example.hotelbooking.audit.application.port.out.AuditObservabilityContext;
 import com.example.hotelbooking.audit.application.service.BookingTimelineProjectionService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,19 +22,16 @@ class PaymentEventsKafkaConsumer {
 
   private final ObjectMapper objectMapper;
   private final BookingTimelineProjectionService projectionService;
+  private final AuditObservabilityContext observabilityContext;
 
   @KafkaListener(
       topics = "${app.audit.kafka.payment-events-topic}",
       groupId = "${app.audit.kafka.group-id}")
   public void consume(ConsumerRecord<String, String> record, Acknowledgment acknowledgment) {
+    PaymentEventEnvelope event;
+
     try {
-      PaymentEventEnvelope event =
-          objectMapper.readValue(record.value(), PaymentEventEnvelope.class);
-
-      TimelineEventHandlingResult result = projectionService.handle(event);
-
-      logProcessedEvent(record, event, result);
-      acknowledgment.acknowledge();
+      event = objectMapper.readValue(record.value(), PaymentEventEnvelope.class);
     } catch (JsonProcessingException | IllegalArgumentException exception) {
       log.warn(
           "Skipping invalid payment timeline event: topic={}, partition={}, offset={}",
@@ -41,6 +39,27 @@ class PaymentEventsKafkaConsumer {
           record.partition(),
           record.offset(),
           exception);
+
+      acknowledgment.acknowledge();
+      return;
+    }
+
+    try (AuditObservabilityContext.ContextScope ignored =
+        observabilityContext.openPaymentEvent(event)) {
+      try {
+        TimelineEventHandlingResult result = projectionService.handle(event);
+
+        logProcessedEvent(record, event, result);
+      } catch (IllegalArgumentException exception) {
+        log.warn(
+            "Skipping invalid payment timeline event: topic={}, partition={}, offset={}, eventId={}, eventType={}",
+            record.topic(),
+            record.partition(),
+            record.offset(),
+            event.eventId(),
+            event.eventType(),
+            exception);
+      }
 
       acknowledgment.acknowledge();
     }

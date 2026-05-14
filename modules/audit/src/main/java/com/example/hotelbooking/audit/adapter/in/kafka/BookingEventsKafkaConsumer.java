@@ -2,6 +2,7 @@ package com.example.hotelbooking.audit.adapter.in.kafka;
 
 import com.example.hotelbooking.audit.application.event.BookingEventEnvelope;
 import com.example.hotelbooking.audit.application.event.TimelineEventHandlingResult;
+import com.example.hotelbooking.audit.application.port.out.AuditObservabilityContext;
 import com.example.hotelbooking.audit.application.service.BookingTimelineProjectionService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -21,19 +22,16 @@ class BookingEventsKafkaConsumer {
 
   private final ObjectMapper objectMapper;
   private final BookingTimelineProjectionService projectionService;
+  private final AuditObservabilityContext observabilityContext;
 
   @KafkaListener(
       topics = "${app.audit.kafka.booking-events-topic}",
       groupId = "${app.audit.kafka.group-id}")
   public void consume(ConsumerRecord<String, String> record, Acknowledgment acknowledgment) {
+    BookingEventEnvelope event;
+
     try {
-      BookingEventEnvelope event =
-          objectMapper.readValue(record.value(), BookingEventEnvelope.class);
-
-      TimelineEventHandlingResult result = projectionService.handle(event);
-
-      logProcessedEvent(record, event, result);
-      acknowledgment.acknowledge();
+      event = objectMapper.readValue(record.value(), BookingEventEnvelope.class);
     } catch (JsonProcessingException exception) {
       log.warn(
           "Skipping malformed booking timeline event: topic={}, partition={}, offset={}",
@@ -42,6 +40,15 @@ class BookingEventsKafkaConsumer {
           record.offset(),
           exception);
 
+      acknowledgment.acknowledge();
+      return;
+    }
+
+    try (AuditObservabilityContext.ContextScope ignored =
+        observabilityContext.openBookingEvent(event)) {
+      TimelineEventHandlingResult result = projectionService.handle(event);
+
+      logProcessedEvent(record, event, result);
       acknowledgment.acknowledge();
     }
   }
