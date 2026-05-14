@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.example.hotelbooking.payment.application.command.CancelPaymentCommand;
 import com.example.hotelbooking.payment.application.exception.PaymentNotFoundException;
+import com.example.hotelbooking.payment.application.port.out.PaymentMetrics;
 import com.example.hotelbooking.payment.application.port.out.PaymentObservabilityContext;
 import com.example.hotelbooking.payment.application.port.out.PaymentRepository;
 import com.example.hotelbooking.payment.application.provider.PaymentProviderGateway;
@@ -87,7 +88,11 @@ class CancelPaymentServiceTest {
 
   private CancelPaymentService newService() {
     return new CancelPaymentService(
-        paymentRepository, gatewayRegistry, persistenceService, PaymentObservabilityContext.noop());
+        paymentRepository,
+        gatewayRegistry,
+        persistenceService,
+        PaymentObservabilityContext.noop(),
+        PaymentMetrics.noop());
   }
 
   private Payment authorizedPayment() {
