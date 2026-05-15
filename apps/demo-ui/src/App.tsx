@@ -1,18 +1,24 @@
-import { appConfig } from "./config/appConfig";
+import { useState } from "react";
 import { HotelsPage } from "./pages/HotelsPage";
+import { MyBookingsPage } from "./pages/MyBookingsPage";
+import { appConfig } from "./config/appConfig";
+
+type AppPage = "hotels" | "my-bookings";
 
 /**
  * App is the root React component.
  *
- * For now we keep navigation intentionally simple and render only one page.
- * Later we will add small navigation between:
+ * We intentionally do not add React Router yet.
+ * For this small demo UI a local page state is enough:
  *
- * - Hotels
- * - My bookings
- * - Inventory admin
- * - Observability
+ * - hotels
+ * - my-bookings
+ *
+ * Later, if the UI grows, this can be replaced with proper routing.
  */
 function App() {
+  const [currentPage, setCurrentPage] = useState<AppPage>("hotels");
+
   return (
     <main className="app-shell">
       <header className="top-bar">
@@ -34,7 +40,28 @@ function App() {
         <ServiceLink label="Audit" value={appConfig.auditServiceBaseUrl} />
       </section>
 
-      <HotelsPage />
+      <nav className="main-navigation">
+        <button
+          className={currentPage === "hotels" ? "nav-button nav-button-active" : "nav-button"}
+          type="button"
+          onClick={() => setCurrentPage("hotels")}
+        >
+          Hotels
+        </button>
+
+        <button
+          className={
+            currentPage === "my-bookings" ? "nav-button nav-button-active" : "nav-button"
+          }
+          type="button"
+          onClick={() => setCurrentPage("my-bookings")}
+        >
+          My bookings
+        </button>
+      </nav>
+
+      {currentPage === "hotels" && <HotelsPage />}
+      {currentPage === "my-bookings" && <MyBookingsPage />}
     </main>
   );
 }
