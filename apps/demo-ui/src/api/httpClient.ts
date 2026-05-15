@@ -71,7 +71,20 @@ export async function apiFetch<T>(
 function buildUrl(baseUrl: string, path: string, query?: QueryParams): string {
   const normalizedBaseUrl = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-  const url = new URL(`${normalizedBaseUrl}${normalizedPath}`);
+
+  /**
+   * baseUrl can be absolute:
+   *   http://localhost:8081
+   *
+   * or relative through Vite proxy:
+   *   /inventory-api
+   *
+   * new URL(relativePath, window.location.origin) makes relative proxy URLs valid.
+   */
+  const url =
+    normalizedBaseUrl.startsWith("http://") || normalizedBaseUrl.startsWith("https://")
+      ? new URL(`${normalizedBaseUrl}${normalizedPath}`)
+      : new URL(`${normalizedBaseUrl}${normalizedPath}`, window.location.origin);
 
   if (query) {
     Object.entries(query).forEach(([key, value]) => {
