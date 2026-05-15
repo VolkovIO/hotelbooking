@@ -909,4 +909,35 @@ th {
       grid-template-columns: 1fr;
     }
   }
+
+  /* ===== Cancellation action ===== */
+
+  .state-card-success {
+    margin-bottom: 16px;
+    border-color: #bbf7d0;
+    background: #f0fdf4;
+    color: #166534;
+  }
+
+  .row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .small-action-button-danger {
+    border-color: #fecaca;
+    background: #fff1f2;
+    color: #be123c;
+  }
+
+  .small-action-button-danger:hover {
+    background: #ffe4e6;
+  }
+
+  .small-action-button:disabled,
+  .small-action-button-danger:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
 }

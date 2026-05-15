@@ -3,6 +3,7 @@ import {
   auditApi,
   bookingApi,
   type BookingPageResponse,
+  type BookingStatus,
   type TimelineEventResponse,
   type UUID,
 } from "../api";
@@ -13,17 +14,20 @@ import { StatusBadge } from "../components/StatusBadge";
 const DEFAULT_PAGE_SIZE = 10;
 
 /**
- * MyBookingsPage shows bookings owned by the current user and allows opening
- * audit timeline for a selected booking.
+ * MyBookingsPage shows bookings owned by the current user and allows:
+ *
+ * - opening audit timeline
+ * - cancelling active bookings
  *
  * Backend endpoints:
  *
- *   GET /api/v1/bookings/my?page=0&size=10
- *   GET /api/v1/bookings/{bookingId}/timeline
+ *   GET  /api/v1/bookings/my?page=0&size=10
+ *   GET  /api/v1/bookings/{bookingId}/timeline
+ *   POST /api/v1/bookings/{bookingId}/cancel
  *
- * This page is important for the demo because the booking saga is asynchronous:
- * the initial saga response is useful, but the audit timeline explains what
- * actually happened across booking-service, payment-service and Kafka consumers.
+ * This page is important for the demo because it closes the basic booking lifecycle:
+ *
+ *   create saga -> observe status/timeline -> cancel booking -> observe BookingCancelled
  */
 export function MyBookingsPage() {
   const [bookingsPage, setBookingsPage] = useState<BookingPageResponse | null>(null);
@@ -35,6 +39,10 @@ export function MyBookingsPage() {
   const [timeline, setTimeline] = useState<TimelineEventResponse[]>([]);
   const [timelineLoading, setTimelineLoading] = useState(false);
   const [timelineError, setTimelineError] = useState<unknown>(null);
+
+  const [cancellingBookingId, setCancellingBookingId] = useState<UUID | null>(null);
+  const [cancellationError, setCancellationError] = useState<unknown>(null);
+  const [cancellationMessage, setCancellationMessage] = useState<string | null>(null);
 
   async function loadBookings(pageToLoad: number) {
     try {
@@ -79,6 +87,40 @@ export function MyBookingsPage() {
     }
   }
 
+  async function cancelBooking(bookingId: UUID) {
+    /**
+     * window.confirm is enough for this demo UI.
+     *
+     * Later we can replace it with a nicer modal, but for a senior backend demo
+     * the important part is the integration with booking-service and timeline refresh.
+     */
+    const confirmed = window.confirm("Cancel this booking?");
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      setCancellingBookingId(bookingId);
+      setCancellationError(null);
+      setCancellationMessage(null);
+
+      const cancelledBooking = await bookingApi.cancelBooking(bookingId);
+
+      setCancellationMessage(`Booking ${cancelledBooking.bookingId} cancelled.`);
+
+      await loadBookings(page);
+
+      if (selectedBookingId === bookingId) {
+        await openTimeline(bookingId);
+      }
+    } catch (requestError) {
+      setCancellationError(requestError);
+    } finally {
+      setCancellingBookingId(null);
+    }
+  }
+
   function reloadCurrentPage() {
     loadBookings(page);
 
@@ -105,7 +147,7 @@ export function MyBookingsPage() {
           <h1>My bookings</h1>
           <p className="page-description">
             Paginated list of current user bookings. Select a booking to inspect
-            the cross-service audit timeline.
+            the cross-service audit timeline or cancel an active booking.
           </p>
         </div>
 
@@ -113,6 +155,12 @@ export function MyBookingsPage() {
           Refresh
         </button>
       </div>
+
+      {cancellationMessage !== null && (
+        <div className="state-card state-card-success">{cancellationMessage}</div>
+      )}
+
+      {cancellationError !== null && <ErrorMessage error={cancellationError} />}
 
       {bookingsLoading && <LoadingState text="Loading current user bookings..." />}
 
@@ -186,13 +234,27 @@ export function MyBookingsPage() {
                           </code>
                         </td>
                         <td>
-                          <button
-                            className="small-action-button"
-                            type="button"
-                            onClick={() => openTimeline(booking.bookingId)}
-                          >
-                            Timeline
-                          </button>
+                          <div className="row-actions">
+                            <button
+                              className="small-action-button"
+                              type="button"
+                              onClick={() => openTimeline(booking.bookingId)}
+                            >
+                              Timeline
+                            </button>
+
+                            <button
+                              className="small-action-button small-action-button-danger"
+                              type="button"
+                              disabled={
+                                !canCancelBooking(booking.status) ||
+                                cancellingBookingId === booking.bookingId
+                              }
+                              onClick={() => cancelBooking(booking.bookingId)}
+                            >
+                              {cancellingBookingId === booking.bookingId ? "Cancelling..." : "Cancel"}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -236,6 +298,10 @@ export function MyBookingsPage() {
       />
     </section>
   );
+}
+
+function canCancelBooking(status: BookingStatus): boolean {
+  return status === "ON_HOLD" || status === "CONFIRMED";
 }
 
 type TimelinePanelProps = {
