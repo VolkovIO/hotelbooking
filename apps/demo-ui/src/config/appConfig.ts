@@ -1,15 +1,25 @@
 /**
+ * Authentication mode supported by the demo UI.
+ *
+ * demo:
+ *   booking-service runs with the dev security profile and resolves the current user
+ *   internally as dev@example.com. The frontend does not send Authorization header.
+ *
+ * google:
+ *   the frontend receives a Google ID token and sends it to booking-service as
+ *   Authorization: Bearer <token>. We will add this later.
+ */
+export type AuthMode = "demo" | "google";
+
+function resolveAuthMode(value: string | undefined): AuthMode {
+  return value === "google" ? "google" : "demo";
+}
+
+/**
  * Central place for demo UI runtime configuration.
  *
  * In Java terms, this file plays a role similar to application.yaml:
  * it keeps external service URLs and demo settings outside of React components.
- *
- * For the first UI step we do not call backend services yet,
- * but defining these URLs now makes the next steps easier:
- *
- * - booking-service: creates bookings and returns current user's bookings
- * - inventory-service: hotels, room types and availability
- * - audit-service: booking timeline
  */
 export const appConfig = {
   bookingServiceBaseUrl:
@@ -21,13 +31,7 @@ export const appConfig = {
   auditServiceBaseUrl:
     import.meta.env.VITE_AUDIT_SERVICE_BASE_URL ?? "http://localhost:8084",
 
-  /**
-   * For the first version we use the backend dev profile.
-   *
-   * In dev mode booking-service resolves the current user internally
-   * as the fixed demo user. The frontend does not send Authorization header yet.
-   */
-  authMode: import.meta.env.VITE_AUTH_MODE ?? "demo",
+  authMode: resolveAuthMode(import.meta.env.VITE_AUTH_MODE),
 
   demoUserEmail: "dev@example.com",
 } as const;
