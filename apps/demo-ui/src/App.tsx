@@ -1,7 +1,7 @@
 import { useState } from "react";
+import { appConfig } from "./config/appConfig";
 import { HotelsPage } from "./pages/HotelsPage";
 import { MyBookingsPage } from "./pages/MyBookingsPage";
-import { appConfig } from "./config/appConfig";
 
 type AppPage = "hotels" | "my-bookings";
 
@@ -25,6 +25,9 @@ function App() {
         <div>
           <div className="hero-badge">Hotel Booking Demo UI</div>
           <h1 className="app-title">Distributed hotel booking platform</h1>
+          <p className="app-subtitle">
+            Demo client for booking saga, inventory availability, payment flow and audit timeline.
+          </p>
         </div>
 
         <div className="auth-card">
@@ -40,23 +43,29 @@ function App() {
         <ServiceLink label="Audit" value={appConfig.auditServiceBaseUrl} />
       </section>
 
-      <nav className="main-navigation">
+      <nav className="main-navigation" aria-label="Demo UI navigation">
         <button
-          className={currentPage === "hotels" ? "nav-button nav-button-active" : "nav-button"}
+          className={currentPage === "hotels" ? "nav-tab nav-tab-active" : "nav-tab"}
           type="button"
           onClick={() => setCurrentPage("hotels")}
         >
-          Hotels
+          <span className="nav-tab-icon">🏨</span>
+          <span>
+            <strong>Hotels</strong>
+            <small>Catalog & booking saga</small>
+          </span>
         </button>
 
         <button
-          className={
-            currentPage === "my-bookings" ? "nav-button nav-button-active" : "nav-button"
-          }
+          className={currentPage === "my-bookings" ? "nav-tab nav-tab-active" : "nav-tab"}
           type="button"
           onClick={() => setCurrentPage("my-bookings")}
         >
-          My bookings
+          <span className="nav-tab-icon">📋</span>
+          <span>
+            <strong>My bookings</strong>
+            <small>Status, timeline & cancel</small>
+          </span>
         </button>
       </nav>
 

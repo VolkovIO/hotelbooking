@@ -12,6 +12,7 @@ import {
 } from "../api";
 import { ErrorMessage } from "../components/ErrorMessage";
 import { LoadingState } from "../components/LoadingState";
+import { TechnicalId } from "../components/TechnicalId";
 
 /**
  * Default demo dates.
@@ -671,7 +672,7 @@ function BookingSagaResult({ result }: BookingSagaResultProps) {
           <h3>Booking flow accepted</h3>
         </div>
 
-        <span className="status-badge">{result.sagaStatus}</span>
+        <span className="saga-status-badge">{result.sagaStatus}</span>
       </div>
 
       <div className="result-grid">
@@ -697,10 +698,17 @@ type ResultItemProps = {
 };
 
 function ResultItem({ label, value }: ResultItemProps) {
+  const looksLikeTechnicalId = value.includes("-") && value.length >= 32;
+
   return (
     <div className="result-item">
       <span>{label}</span>
-      <code>{value}</code>
+
+      {looksLikeTechnicalId ? (
+        <TechnicalId value={value} />
+      ) : (
+        <code className="result-value">{value}</code>
+      )}
     </div>
   );
 }

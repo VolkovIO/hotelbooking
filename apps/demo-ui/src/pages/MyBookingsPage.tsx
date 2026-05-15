@@ -10,28 +10,29 @@ import {
 import { ErrorMessage } from "../components/ErrorMessage";
 import { LoadingState } from "../components/LoadingState";
 import { StatusBadge } from "../components/StatusBadge";
+import { TechnicalId } from "../components/TechnicalId";
 
 const DEFAULT_PAGE_SIZE = 10;
+const PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
 
 /**
  * MyBookingsPage shows bookings owned by the current user and allows:
  *
  * - opening audit timeline
  * - cancelling active bookings
+ * - changing page size
+ * - jumping directly to a page
  *
  * Backend endpoints:
  *
  *   GET  /api/v1/bookings/my?page=0&size=10
  *   GET  /api/v1/bookings/{bookingId}/timeline
  *   POST /api/v1/bookings/{bookingId}/cancel
- *
- * This page is important for the demo because it closes the basic booking lifecycle:
- *
- *   create saga -> observe status/timeline -> cancel booking -> observe BookingCancelled
  */
 export function MyBookingsPage() {
   const [bookingsPage, setBookingsPage] = useState<BookingPageResponse | null>(null);
   const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [bookingsLoading, setBookingsLoading] = useState(true);
   const [bookingsError, setBookingsError] = useState<unknown>(null);
 
@@ -44,14 +45,14 @@ export function MyBookingsPage() {
   const [cancellationError, setCancellationError] = useState<unknown>(null);
   const [cancellationMessage, setCancellationMessage] = useState<string | null>(null);
 
-  async function loadBookings(pageToLoad: number) {
+  async function loadBookings(pageToLoad: number, sizeToLoad: number) {
     try {
       setBookingsLoading(true);
       setBookingsError(null);
 
       const result = await bookingApi.getMyBookings({
         page: pageToLoad,
-        size: DEFAULT_PAGE_SIZE,
+        size: sizeToLoad,
       });
 
       setBookingsPage(result);
@@ -63,12 +64,9 @@ export function MyBookingsPage() {
     }
   }
 
-  /**
-   * Reload bookings when page number changes.
-   */
   useEffect(() => {
-    loadBookings(page);
-  }, [page]);
+    loadBookings(page, pageSize);
+  }, [page, pageSize]);
 
   async function openTimeline(bookingId: UUID) {
     try {
@@ -88,12 +86,6 @@ export function MyBookingsPage() {
   }
 
   async function cancelBooking(bookingId: UUID) {
-    /**
-     * window.confirm is enough for this demo UI.
-     *
-     * Later we can replace it with a nicer modal, but for a senior backend demo
-     * the important part is the integration with booking-service and timeline refresh.
-     */
     const confirmed = window.confirm("Cancel this booking?");
 
     if (!confirmed) {
@@ -109,7 +101,7 @@ export function MyBookingsPage() {
 
       setCancellationMessage(`Booking ${cancelledBooking.bookingId} cancelled.`);
 
-      await loadBookings(page);
+      await loadBookings(page, pageSize);
 
       if (selectedBookingId === bookingId) {
         await openTimeline(bookingId);
@@ -122,11 +114,16 @@ export function MyBookingsPage() {
   }
 
   function reloadCurrentPage() {
-    loadBookings(page);
+    loadBookings(page, pageSize);
 
     if (selectedBookingId !== null) {
       openTimeline(selectedBookingId);
     }
+  }
+
+  function changePageSize(nextPageSize: number) {
+    setPage(0);
+    setPageSize(nextPageSize);
   }
 
   function goToPreviousPage() {
@@ -139,6 +136,17 @@ export function MyBookingsPage() {
     }
   }
 
+  function jumpToPage(nextPage: number) {
+    if (bookingsPage === null) {
+      return;
+    }
+
+    const maxPage = Math.max(bookingsPage.totalPages - 1, 0);
+    const safePage = Math.min(Math.max(nextPage, 0), maxPage);
+
+    setPage(safePage);
+  }
+
   return (
     <section className="page-section">
       <div className="page-header">
@@ -146,18 +154,20 @@ export function MyBookingsPage() {
           <p className="eyebrow">Booking service + audit service</p>
           <h1>My bookings</h1>
           <p className="page-description">
-            Paginated list of current user bookings. Select a booking to inspect
-            the cross-service audit timeline or cancel an active booking.
+            Current user bookings with status, cancellation action and cross-service audit timeline.
           </p>
         </div>
 
-        <button className="secondary-button" type="button" onClick={reloadCurrentPage}>
+        <button className="secondary-button secondary-button-strong" type="button" onClick={reloadCurrentPage}>
           Refresh
         </button>
       </div>
 
       {cancellationMessage !== null && (
-        <div className="state-card state-card-success">{cancellationMessage}</div>
+        <div className="feedback-banner feedback-banner-success">
+          <strong>Booking cancelled</strong>
+          <span>{cancellationMessage}</span>
+        </div>
       )}
 
       {cancellationError !== null && <ErrorMessage error={cancellationError} />}
@@ -180,6 +190,15 @@ export function MyBookingsPage() {
         bookingsPage !== null &&
         bookingsPage.content.length > 0 && (
           <>
+            <BookingsToolbar
+              bookingsPage={bookingsPage}
+              pageSize={pageSize}
+              onPageSizeChange={changePageSize}
+              onPrevious={goToPreviousPage}
+              onNext={goToNextPage}
+              onJumpToPage={jumpToPage}
+            />
+
             <div className="bookings-table-card">
               <div className="table-header">
                 <h3>Bookings</h3>
@@ -190,7 +209,7 @@ export function MyBookingsPage() {
               </div>
 
               <div className="responsive-table">
-                <table>
+                <table className="data-table">
                   <thead>
                     <tr>
                       <th>Status</th>
@@ -219,24 +238,18 @@ export function MyBookingsPage() {
                         <td>{booking.checkOut}</td>
                         <td>{booking.guestCount}</td>
                         <td>
-                          <code className="compact-code" title={booking.hotelId}>
-                            {booking.hotelId}
-                          </code>
+                          <TechnicalId value={booking.hotelId} />
                         </td>
                         <td>
-                          <code className="compact-code" title={booking.roomTypeId}>
-                            {booking.roomTypeId}
-                          </code>
+                          <TechnicalId value={booking.roomTypeId} />
                         </td>
                         <td>
-                          <code className="compact-code" title={booking.bookingId}>
-                            {booking.bookingId}
-                          </code>
+                          <TechnicalId value={booking.bookingId} />
                         </td>
                         <td>
                           <div className="row-actions">
                             <button
-                              className="small-action-button"
+                              className="small-action-button small-action-button-primary"
                               type="button"
                               onClick={() => openTimeline(booking.bookingId)}
                             >
@@ -263,30 +276,14 @@ export function MyBookingsPage() {
               </div>
             </div>
 
-            <div className="pagination-bar">
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={bookingsPage.first}
-                onClick={goToPreviousPage}
-              >
-                Previous
-              </button>
-
-              <span>
-                Page <strong>{bookingsPage.page + 1}</strong> /{" "}
-                <strong>{Math.max(bookingsPage.totalPages, 1)}</strong>
-              </span>
-
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={bookingsPage.last}
-                onClick={goToNextPage}
-              >
-                Next
-              </button>
-            </div>
+            <BookingsToolbar
+              bookingsPage={bookingsPage}
+              pageSize={pageSize}
+              onPageSizeChange={changePageSize}
+              onPrevious={goToPreviousPage}
+              onNext={goToNextPage}
+              onJumpToPage={jumpToPage}
+            />
           </>
         )}
 
@@ -304,6 +301,86 @@ function canCancelBooking(status: BookingStatus): boolean {
   return status === "ON_HOLD" || status === "CONFIRMED";
 }
 
+type BookingsToolbarProps = {
+  bookingsPage: BookingPageResponse;
+  pageSize: number;
+  onPageSizeChange: (pageSize: number) => void;
+  onPrevious: () => void;
+  onNext: () => void;
+  onJumpToPage: (page: number) => void;
+};
+
+function BookingsToolbar({
+  bookingsPage,
+  pageSize,
+  onPageSizeChange,
+  onPrevious,
+  onNext,
+  onJumpToPage,
+}: BookingsToolbarProps) {
+  const totalPages = Math.max(bookingsPage.totalPages, 1);
+
+  return (
+    <div className="bookings-toolbar">
+      <div className="toolbar-group">
+        <button
+          className="pagination-button"
+          type="button"
+          disabled={bookingsPage.first}
+          onClick={onPrevious}
+        >
+          ← Previous
+        </button>
+
+        <button
+          className="pagination-button"
+          type="button"
+          disabled={bookingsPage.last}
+          onClick={onNext}
+        >
+          Next →
+        </button>
+      </div>
+
+      <div className="toolbar-group toolbar-group-right">
+        <label className="toolbar-field">
+          <span>Rows</span>
+          <select
+            value={pageSize}
+            onChange={(event) => onPageSizeChange(Number(event.target.value))}
+          >
+            {PAGE_SIZE_OPTIONS.map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="toolbar-field">
+          <span>Page</span>
+          <select
+            value={bookingsPage.page}
+            onChange={(event) => onJumpToPage(Number(event.target.value))}
+          >
+            {Array.from({ length: totalPages }, (_, index) => (
+              <option key={index} value={index}>
+                {index + 1}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="page-counter">
+          <strong>{bookingsPage.page + 1}</strong>
+          <span>/</span>
+          <strong>{totalPages}</strong>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 type TimelinePanelProps = {
   selectedBookingId: UUID | null;
   timeline: TimelineEventResponse[];
@@ -311,12 +388,6 @@ type TimelinePanelProps = {
   error: unknown;
 };
 
-/**
- * TimelinePanel renders audit events for one selected booking.
- *
- * The audit-service timeline is useful because it shows the distributed story,
- * not just the final booking status.
- */
 function TimelinePanel({ selectedBookingId, timeline, loading, error }: TimelinePanelProps) {
   if (selectedBookingId === null) {
     return (
@@ -337,8 +408,7 @@ function TimelinePanel({ selectedBookingId, timeline, loading, error }: Timeline
           <p className="eyebrow">Audit timeline</p>
           <h2>Booking lifecycle</h2>
           <p className="muted-text">
-            Events recorded by audit-service for booking{" "}
-            <code className="inline-code">{selectedBookingId}</code>
+            Events recorded by audit-service for booking <TechnicalId value={selectedBookingId} />
           </p>
         </div>
       </div>
@@ -410,7 +480,7 @@ function MetaItem({ label, value }: MetaItemProps) {
   return (
     <div className="meta-item">
       <span>{label}</span>
-      <code title={value}>{value}</code>
+      <TechnicalId value={value} />
     </div>
   );
 }

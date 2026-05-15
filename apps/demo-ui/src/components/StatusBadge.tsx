@@ -5,11 +5,15 @@ type StatusBadgeProps = {
 };
 
 /**
- * Small visual component for booking status.
+ * Visual badge for booking status.
  *
- * We keep status-to-style mapping in one place instead of scattering
- * conditional CSS class names across pages.
+ * The CSS class name is intentionally booking-status-badge, not just status-badge,
+ * because saga status and booking status are different concepts.
  */
 export function StatusBadge({ status }: StatusBadgeProps) {
-  return <span className={`status-badge status-badge-${status.toLowerCase()}`}>{status}</span>;
+  return (
+    <span className={`booking-status-badge booking-status-badge-${status.toLowerCase()}`}>
+      {status}
+    </span>
+  );
 }
