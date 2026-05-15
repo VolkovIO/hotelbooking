@@ -2,6 +2,7 @@ package com.example.hotelbooking.booking.application.service;
 
 import com.example.hotelbooking.booking.application.command.StartBookingSagaCommand;
 import com.example.hotelbooking.booking.application.port.in.StartBookingSagaUseCase;
+import com.example.hotelbooking.booking.application.port.out.BookingObservabilityContext;
 import com.example.hotelbooking.booking.application.saga.BookingSaga;
 import com.example.hotelbooking.booking.application.saga.BookingSagaProcessManager;
 import com.example.hotelbooking.booking.application.saga.BookingSagaStartPersistenceService;
@@ -24,6 +25,7 @@ public class StartBookingSagaService implements StartBookingSagaUseCase {
 
   private final BookingSagaStartPersistenceService startPersistenceService;
   private final BookingSagaProcessManager processManager;
+  private final BookingObservabilityContext observabilityContext;
 
   @Override
   public BookingSaga execute(StartBookingSagaCommand command) {
@@ -31,9 +33,13 @@ public class StartBookingSagaService implements StartBookingSagaUseCase {
 
     BookingSaga saga = startPersistenceService.createBookingAndSaga(command);
 
-    log.info(
-        "Booking saga started: sagaId={}, bookingId={}", saga.getId().value(), saga.getBookingId());
+    try (BookingObservabilityContext.ContextScope ignored = observabilityContext.openSaga(saga)) {
+      log.info(
+          "Booking saga started: sagaId={}, bookingId={}",
+          saga.getId().value(),
+          saga.getBookingId());
 
-    return processManager.process(saga.getId());
+      return processManager.process(saga.getId());
+    }
   }
 }

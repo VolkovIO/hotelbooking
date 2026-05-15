@@ -3,9 +3,12 @@ package com.example.hotelbooking.notification.adapter.in.kafka;
 import com.example.hotelbooking.notification.application.event.BookingEventEnvelope;
 import com.example.hotelbooking.notification.application.event.BookingEventHandlingResult;
 import com.example.hotelbooking.notification.application.event.BookingEventRejectedException;
+import com.example.hotelbooking.notification.application.port.out.NotificationMetrics;
+import com.example.hotelbooking.notification.application.port.out.NotificationObservabilityContext;
 import com.example.hotelbooking.notification.application.service.BookingEventNotificationService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
@@ -20,35 +23,57 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 class BookingEventsKafkaConsumer {
 
+  private static final String EVENT_TYPE_UNKNOWN = "unknown";
+  private static final String OUTCOME_MALFORMED = "malformed";
+  private static final String OUTCOME_REJECTED = "rejected";
+
   private final ObjectMapper objectMapper;
   private final BookingEventNotificationService notificationService;
+  private final NotificationObservabilityContext observabilityContext;
+  private final NotificationMetrics notificationMetrics;
 
   @KafkaListener(
       topics = "${app.notification.kafka.booking-events-topic}",
       groupId = "${app.notification.kafka.group-id}")
   public void consume(ConsumerRecord<String, String> record, Acknowledgment acknowledgment) {
-    try {
-      BookingEventEnvelope event =
-          objectMapper.readValue(record.value(), BookingEventEnvelope.class);
-      BookingEventHandlingResult result = notificationService.handle(event);
+    BookingEventEnvelope event;
 
-      logProcessedEvent(record, event, result);
-      acknowledgment.acknowledge();
+    try {
+      event = objectMapper.readValue(record.value(), BookingEventEnvelope.class);
     } catch (JsonProcessingException exception) {
+      notificationMetrics.bookingEventProcessed(EVENT_TYPE_UNKNOWN, OUTCOME_MALFORMED);
+
       log.warn(
           "Skipping malformed booking event: topic={}, partition={}, offset={}",
           record.topic(),
           record.partition(),
           record.offset(),
           exception);
+
       acknowledgment.acknowledge();
-    } catch (BookingEventRejectedException exception) {
-      log.warn(
-          "Skipping rejected booking event: topic={}, partition={}, offset={}, reason={}",
-          record.topic(),
-          record.partition(),
-          record.offset(),
-          exception.getMessage());
+      return;
+    }
+
+    try (NotificationObservabilityContext.ContextScope ignored =
+        observabilityContext.openBookingEvent(event)) {
+      try {
+        BookingEventHandlingResult result = notificationService.handle(event);
+
+        notificationMetrics.bookingEventProcessed(event.eventType(), outcome(result));
+        logProcessedEvent(record, event, result);
+      } catch (BookingEventRejectedException exception) {
+        notificationMetrics.bookingEventProcessed(event.eventType(), OUTCOME_REJECTED);
+
+        log.warn(
+            "Skipping rejected booking event: topic={}, partition={}, offset={}, eventId={}, eventType={}, reason={}",
+            record.topic(),
+            record.partition(),
+            record.offset(),
+            event.eventId(),
+            event.eventType(),
+            exception.getMessage());
+      }
+
       acknowledgment.acknowledge();
     }
   }
@@ -86,5 +111,9 @@ class BookingEventsKafkaConsumer {
         record.offset(),
         event.eventId(),
         event.eventType());
+  }
+
+  private String outcome(BookingEventHandlingResult result) {
+    return result.name().toLowerCase(Locale.ROOT);
   }
 }

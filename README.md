@@ -1,117 +1,115 @@
 # Hotel Booking — Senior Java Learning Project
 
-Hotel Booking is an educational backend project for practicing production-style Java development.
+Hotel Booking is an educational backend project for practicing production-style Java development with Spring Boot, Clean Architecture and service-to-service integration.
 
-The main goal of the project is not to build a commercial booking product, but to gradually study and demonstrate senior-level backend engineering topics:
+The goal is not to build a commercial booking platform. The goal is to demonstrate backend engineering decisions that are common in real systems and to keep those decisions explainable during interviews.
+
+## What this project demonstrates
 
 - Clean Architecture / Hexagonal Architecture
-- Domain-Driven Design basics
-- modular monolith decomposition and transition to services
-- Spring Boot service design
-- PostgreSQL and MongoDB persistence
-- Kafka-based event-driven integration
-- gRPC service-to-service communication
+- Domain-Driven Design basics: aggregates, value objects, invariants
+- multi-module Gradle project structure
+- PostgreSQL persistence for transactional business state
+- MongoDB persistence for document-oriented projections and notification tasks
+- Kafka-based asynchronous integration
 - transactional outbox pattern
-- idempotency and retry handling
-- Docker Compose based local infrastructure
-- orchestration saga and compensation
+- gRPC service-to-service communication
+- HTTP integration between services
+- orchestration saga with compensation and retry
 - comparison of handmade orchestration and Spring Statemachine
 - service-level integration testing with Testcontainers
-- concurrency safety for finite inventory
+- concurrency protection for finite inventory
+- local observability: Actuator, MDC logs, correlation IDs, Micrometer metrics
 - GitHub Actions CI
-- event timeline read model across booking and payment events
-- cross-service correlation ID propagation
 
-The project is intentionally developed step by step. Each milestone adds one or several architectural concepts and keeps the implementation understandable for learning and interview discussion.
+The project is intentionally developed in small milestones. Each milestone adds a focused architectural capability and keeps the implementation understandable.
 
 ## Current milestone
 
 Current version:
 
 ```text
-v0.13.0 — Event timeline integration
+v0.14.0 — Minimal observability and operational readiness
 ```
 
-This version adds a booking-oriented event timeline through `audit-service`.
+This milestone adds a minimal but practical observability layer:
 
-The goal is not to implement a legal audit log. The goal is to provide a read model that makes the distributed booking flow observable and explainable.
+- Spring Boot Actuator health, readiness and metrics endpoints
+- shared MDC logging context
+- request and business correlation identifiers in logs
+- gRPC metadata propagation for booking -> inventory calls
+- Kafka consumer MDC context for audit and notification services
+- notification delivery context restored from persisted notification tasks
+- Micrometer business metrics for booking, payment and notification flows
+- per-call gRPC deadlines for inventory calls
+- a standardized local `dev` profile group
 
-The timeline answers a practical question:
+The purpose is to make the distributed booking flow easier to follow without introducing a full monitoring stack such as Prometheus, Grafana, Loki, ELK or OpenTelemetry yet.
 
-```text
-What happened to this booking?
-```
-
-The current implementation consumes events from:
-
-- `booking.events`
-- `payment.events`
-
-For a successful booking saga, the timeline shows:
-
-```text
-BookingPlacedOnHold
-PaymentAuthorized
-BookingConfirmed
-PaymentApproved
-```
-
-Events produced by the same booking saga share the same `correlationId`. In the current implementation, the saga id is used as the correlation id for the distributed booking/payment flow.
-
-Manual booking cancellation is treated as a separate business flow and therefore receives its own `correlationId`.
-
-## Architecture focus
-
-The project is organized around Clean Architecture / Hexagonal Architecture ideas.
-
-Typical module structure:
-
-```text
-adapter/in     -> REST controllers, Kafka consumers, schedulers
-adapter/out    -> PostgreSQL, MongoDB, Kafka, gRPC, HTTP clients
-application    -> use cases, ports, commands, queries, orchestration
-application/port/in
-application/port/out
-domain         -> aggregates, value objects, invariants
-```
-
-Main principles used in the project:
-
-- domain model does not depend on Spring
-- application layer depends on ports, not adapters
-- adapters implement infrastructure details
-- business state changes are explicit
-- integration events are published through outbox where needed
-- external service calls are not wrapped into local database transactions
-- critical persistence-boundary behavior is covered by integration tests
-
-## Services and modules
-
-The project currently contains several service applications and modules.
+## Services
 
 ### Booking service
 
 Responsible for:
 
 - creating bookings
-- holding and confirming inventory
-- coordinating payment during booking creation
-- publishing booking lifecycle events through outbox
-- exposing the main booking saga API
-- exposing the Spring Statemachine saga prototype API behind a profile
+- running the booking saga
+- holding and confirming inventory through gRPC
+- authorizing and approving payments through payment-service
+- cancelling bookings
+- writing booking lifecycle events to the booking outbox
+- publishing booking events to Kafka
+- exposing the main booking API
+- exposing a Spring Statemachine saga comparison endpoint
+
+Main HTTP port:
+
+```text
+8080
+```
 
 ### Inventory service
 
 Responsible for:
 
 - hotel and room type inventory
-- placing temporary holds
-- confirming holds
-- releasing holds
-- cancelling confirmed reservations
+- room availability
+- temporary inventory holds
+- hold confirmation
+- hold release
+- confirmed reservation cancellation
 - protecting finite room availability under concurrent hold attempts
 
-Booking-service communicates with inventory-service through gRPC in the normal local application flow.
+Booking-service communicates with inventory-service through gRPC.
+
+Main HTTP port:
+
+```text
+8081
+```
+
+Main gRPC port:
+
+```text
+9090
+```
+
+### Notification service
+
+Responsible for:
+
+- consuming booking events from Kafka
+- creating idempotent notification tasks
+- storing notification source context for later delivery
+- delivering notifications through a logging sender adapter
+
+The logging sender is intentionally used for local/demo runs. It makes the flow deterministic and does not require external email, Telegram or Max credentials.
+
+Main HTTP port:
+
+```text
+8082
+```
 
 ### Payment service
 
@@ -120,30 +118,26 @@ Responsible for:
 - payment authorization
 - payment approval
 - payment cancellation
-- publishing payment events through outbox
-- fake payment provider for local testing
+- fake payment provider integration for local scenarios
+- writing payment lifecycle events to the payment outbox
+- publishing payment events to Kafka
 
-The fake payment provider supports payment decline scenarios for testing saga compensation.
+The fake provider supports successful and declined authorization scenarios. No real card processing is implemented.
 
-### Notification service
+Main HTTP port:
 
-Responsible for:
-
-- consuming booking events from Kafka
-- creating notification records
-- sending notifications through a logging sender adapter
-
-Real Telegram and Max sender adapters are intentionally not implemented yet. For this educational project, logging sender is enough to verify the full flow.
+```text
+8083
+```
 
 ### Audit service
 
 Responsible for:
 
-- consuming booking lifecycle events from Kafka
-- consuming payment lifecycle events from Kafka
+- consuming booking events from Kafka
+- consuming payment events from Kafka
 - projecting events into a MongoDB booking timeline read model
-- storing timeline events idempotently by `eventId`
-- exposing the booking timeline API
+- exposing a booking timeline API
 
 Timeline API:
 
@@ -151,13 +145,15 @@ Timeline API:
 GET /api/v1/bookings/{bookingId}/timeline
 ```
 
-The audit-service groups events by `bookingId` and keeps the original `aggregateType` / `aggregateId` so that booking and payment events can be displayed in one timeline without losing their source aggregate identity.
+Main HTTP port:
+
+```text
+8084
+```
 
 ## Local infrastructure
 
-The project uses Docker Compose for local infrastructure.
-
-Typical local components:
+Docker Compose provides local infrastructure:
 
 - PostgreSQL
 - MongoDB
@@ -171,26 +167,108 @@ hotelbooking          -> booking-service
 hotelbooking_payment  -> payment-service
 ```
 
-MongoDB local setup uses separate logical databases for services that need Mongo persistence.
+MongoDB local setup uses separate logical databases or collections per service where needed.
 
-## Booking saga overview
 
-The booking saga coordinates booking, inventory, payment, Kafka events, and notifications.
+## Local ports and startup prerequisites
+
+Before starting the local stack, make sure these host ports are free:
+
+| Component | Host port | Purpose |
+|---|---:|---|
+| booking-service | 8080 | main booking API and Swagger |
+| inventory-service | 8081 | inventory HTTP API and Swagger |
+| notification-service | 8082 | notification API |
+| payment-service | 8083 | payment API and Swagger |
+| audit-service | 8084 | booking timeline API and Swagger |
+| Kafka UI | 8089 | Kafka UI from Docker Compose |
+| inventory gRPC | 9090 | booking -> inventory synchronous integration |
+| Kafka | 9092 | local Kafka broker |
+| PostgreSQL | 5432 | local transactional database |
+| MongoDB | 27017 | local document database |
+
+Local mTLS certificates are required when the default inventory gRPC TLS settings are enabled.
+Generate them once after cloning the repository:
+
+```bash
+./scripts/generate-dev-mtls-certs.sh
+```
+
+The generated files are written to `certs/dev/` and are intentionally ignored by Git.
+
+Demo inventory data can be loaded from `docker/mongo/init/demo-data.js` or created manually through inventory admin Swagger. The scripted demo data contains fixed hotel and room type ids used by the demo requests.
+
+More details:
+
+```text
+docs/local-development.md
+docs/security.md
+```
+
+## Local run profile
+
+For local development and demo scenarios, each service can be started with:
+
+```text
+--spring.profiles.active=dev
+```
+
+The `dev` profile group is intended to enable the normal local integration path:
+
+- local persistence
+- Kafka publishing/consumption
+- dev security where applicable
+- logging sender for notifications
+- booking saga comparison endpoint
+- shared observability configuration
+
+Older `local` / `local-kafka` profiles may be kept for compatibility, but `dev` is the preferred profile for the current milestone.
+
+
+### Local dev security
+
+The `dev` profile uses development-friendly authentication where applicable.
+For booking-service, the current user is automatically resolved as:
+
+```text
+provider: DEV
+subject:  dev-user
+email:    dev@example.com
+name:     Development User
+roles:    USER, ADMIN
+```
+
+This is only for local/demo usage. In the Google JWT profile, booking-service maps an authenticated Google account to an internal application user and enforces booking ownership through that internal `UserId`. Regular users can access only their own bookings; admin role support is modeled separately.
+
+## Main booking saga flow
 
 Happy path:
 
 ```text
-create booking
-place inventory hold
-authorize payment
-confirm inventory hold
-confirm booking
-approve payment
-publish BookingConfirmed
-send notification
+Client
+  -> booking-service: create booking saga
+  -> inventory-service: place hold
+  -> payment-service: authorize payment
+  -> inventory-service: confirm hold
+  -> booking-service: confirm booking
+  -> payment-service: approve payment
+  -> Kafka: BookingPlacedOnHold, BookingConfirmed
+  -> Kafka: PaymentAuthorized, PaymentApproved
+  -> audit-service: project timeline events
+  -> notification-service: create and deliver confirmation notification
 ```
 
-Payment declined path:
+Final state:
+
+| Component | State |
+|---|---|
+| Booking | `CONFIRMED` |
+| BookingSaga | `COMPLETED` |
+| Payment | `APPROVED` |
+| Inventory | confirmed reservation |
+| Notification | confirmation notification sent |
+
+Declined payment path:
 
 ```text
 create booking
@@ -199,172 +277,93 @@ authorize payment -> DECLINED
 release inventory hold
 cancel booking
 publish BookingCancelled
-send notification
+create and deliver cancellation notification
 ```
 
-The handmade saga is implemented as a process manager with durable saga state in PostgreSQL.
+Final state:
 
-Important saga concepts covered by the project:
+| Component | State |
+|---|---|
+| Booking | `CANCELLED` |
+| BookingSaga | `COMPENSATED` |
+| Payment | `DECLINED` |
+| Inventory | hold released |
+| Notification | cancellation notification sent |
 
-- durable saga state
-- current step persistence
-- compensation
-- retry scheduling
-- transactional outbox integration
-- event-driven notification after booking events
+## Saga implementations
 
-More details are documented in:
+The project contains two saga orchestration implementations:
+
+| Endpoint | Implementation | Purpose |
+|---|---|---|
+| `POST /api/v1/bookings/saga` | Handmade process manager | default production-like implementation |
+| `POST /api/v1/bookings/saga-statemachine` | Spring Statemachine | comparison and learning prototype |
+
+Both implementations reuse the same saga action classes. This keeps the comparison focused on orchestration style rather than duplicated business logic.
+
+More details:
 
 ```text
 docs/booking-saga.md
 docs/workflow-engine-comparison.md
 ```
 
-## Event timeline integration
+## Observability overview
 
-`audit-service` provides a booking-oriented read model for distributed booking flows.
+The project has a minimal observability layer suitable for local development and portfolio demonstration.
 
-It consumes events from Kafka and stores them in MongoDB as timeline events. The read model is intentionally separate from the business transaction path: booking and payment services continue to own their data, while audit-service builds a query-optimized projection.
+### Logging context fields
 
-Current event sources:
-
-- `booking.events`
-- `payment.events`
-
-Current timeline events:
-
-- `BookingPlacedOnHold`
-- `BookingConfirmed`
-- `BookingCancelled`
-- `PaymentAuthorized`
-- `PaymentDeclined`
-- `PaymentApproved`
-- `PaymentCancelled`
-
-Example happy path:
+Logs include a compact MDC context:
 
 ```text
-BookingPlacedOnHold   correlationId = saga-id
-PaymentAuthorized     correlationId = saga-id
-BookingConfirmed      correlationId = saga-id
-PaymentApproved       correlationId = saga-id
+ctx[corr=... saga=... booking=... payment=... event=... type=...]
 ```
 
-Manual cancellation after a confirmed booking is a separate user command and is expected to have a different `correlationId`.
+Meaning:
+
+| Field | Meaning |
+|---|---|
+| `corr` | request or business correlation id |
+| `saga` | booking saga id when available |
+| `booking` | booking id |
+| `payment` | payment id |
+| `event` | Kafka/outbox event id |
+| `type` | Kafka/outbox event type |
+
+Not every field is expected to be present in every log line. For example, batch-level scheduler logs may not have a specific booking or event, while individual outbox and delivery logs do.
+
+### Actuator endpoints
+
+Each application exposes health and metrics through Spring Boot Actuator:
+
+```http
+GET /actuator/health
+GET /actuator/health/liveness
+GET /actuator/health/readiness
+GET /actuator/metrics
+```
+
+Health endpoints are suitable for local readiness checks. Metrics endpoints expose JVM, HTTP and custom business metrics.
+
+### Business metrics
+
+Examples of custom metrics:
+
+```text
+hotelbooking.booking.saga.processed
+hotelbooking.booking.outbox.published
+hotelbooking.payment.authorization.processed
+hotelbooking.payment.outbox.published
+hotelbooking.notification.booking_event.processed
+hotelbooking.notification.delivery.processed
+```
 
 More details:
 
 ```text
-docs/audit-timeline.md
+docs/observability.md
 ```
-
-## Integration testing and concurrency safety
-
-Version `v0.12.0` adds automated tests for last room contention.
-
-### Inventory-level contention
-
-Test:
-
-```text
-InventoryLastRoomContentionIntegrationTest
-```
-
-Location:
-
-```text
-apps/inventory-service-app/src/test/java/com/example/hotelbooking/inventoryservice/InventoryLastRoomContentionIntegrationTest.java
-```
-
-The test uses real MongoDB through Testcontainers and verifies:
-
-```text
-20 concurrent hold attempts
-1 available room
-exactly 1 successful hold
-heldRooms = 1
-availableRooms = 0
-```
-
-This test protects the inventory invariant:
-
-```text
-successful holds must not exceed available rooms
-```
-
-### Atomic inventory hold reservation
-
-Inventory hold placement now uses atomic conditional MongoDB updates instead of read-check-save updates.
-
-Conceptually:
-
-```text
-increment heldRooms
-only if totalRooms - heldRooms - bookedRooms >= requestedRooms
-```
-
-This prevents two concurrent clients from placing holds on the same last available room.
-
-### Booking-level saga contention
-
-Test:
-
-```text
-BookingSagaContentionIntegrationTest
-```
-
-Location:
-
-```text
-apps/booking-service-app/src/test/java/com/example/hotelbooking/bookingservice/BookingSagaContentionIntegrationTest.java
-```
-
-The test uses real booking-service Spring context and PostgreSQL through Testcontainers.
-
-Inventory and payment are controlled test doubles. This keeps the test focused on booking saga behavior.
-
-Expected result:
-
-```text
-completed sagas = 1
-failed sagas = 19
-confirmed bookings = 1
-rejected bookings = 19
-payment authorization calls = 1
-payment approval calls = 1
-payment cancellation calls = 0
-```
-
-More details are documented in:
-
-```text
-docs/integration-testing.md
-```
-
-## GitHub Actions CI
-
-The project contains a CI workflow:
-
-```text
-.github/workflows/ci.yml
-```
-
-The workflow runs on:
-
-```text
-pull requests to master
-pushes to master
-```
-
-Main CI command:
-
-```bash
-./gradlew check --no-daemon --stacktrace
-```
-
-The workflow uses Java 21 and Gradle caching.
-
-If checks fail, test/static-analysis reports are uploaded as workflow artifacts.
 
 ## Running checks
 
@@ -375,143 +374,72 @@ Common checks:
 ./gradlew check
 ```
 
-Module-focused checks:
+Focused checks:
 
 ```bash
 ./gradlew :modules:booking:check
-./gradlew :modules:inventory:check
+./gradlew :modules:payment:check
+./gradlew :modules:notification:check
 ./gradlew :apps:booking-service-app:check
-./gradlew :apps:inventory-service-app:check
 ```
 
-Focused integration tests:
-
-```bash
-./gradlew :apps:inventory-service-app:integrationTest --tests "*InventoryLastRoomContentionIntegrationTest"
-./gradlew :apps:booking-service-app:integrationTest --tests "*BookingSagaContentionIntegrationTest"
-```
-
-Before pull requests, run:
+Before opening a pull request:
 
 ```bash
 ./gradlew clean check
 ```
 
-## Running the booking service
+## Demo flow
 
-Example local run:
-
-```bash
-./gradlew :apps:booking-service-app:bootRun --args="--spring.profiles.active=local-kafka"
-```
-
-To enable the Spring Statemachine prototype endpoint:
-
-```bash
-./gradlew :apps:booking-service-app:bootRun --args="--spring.profiles.active=local-kafka,booking-saga-springstatemachine-prototype"
-```
-
-## Manual saga verification
-
-Happy path request:
-
-```http
-POST /api/v1/bookings/saga
-```
-
-Use a payment amount below the fake provider decline threshold.
-
-Expected result:
+A compact demo script is documented in:
 
 ```text
-Booking       -> CONFIRMED
-BookingSaga   -> COMPLETED
-Payment       -> APPROVED
-Kafka event   -> BookingConfirmed
-Notification  -> confirmation notification sent by logging adapter
+docs/demo-runbook.md
 ```
 
-Payment declined request:
+It covers:
 
-Use a payment amount above the fake provider decline threshold.
+- starting local infrastructure
+- starting services with `dev` profile
+- creating a booking saga
+- checking logs across services
+- checking the audit timeline
+- checking custom Actuator metrics
+- comparing handmade and Spring Statemachine saga execution
 
-Expected result:
+## Known trade-offs
+
+The project is intentionally educational and milestone-based. Some features are consciously out of scope for the current release:
+
+- no real payment provider integration
+- no real email/Telegram/Max notification sender
+- no full centralized observability stack yet
+- no OpenTelemetry tracing yet
+- no automatic inventory hold expiration yet
+- no refund workflow for customer cancellation after an approved payment yet
+- Spring Statemachine is a comparison prototype, not the default orchestration engine
+
+These trade-offs are documented in:
 
 ```text
-Booking       -> CANCELLED
-BookingSaga   -> COMPENSATED
-Payment       -> DECLINED
-Kafka event   -> BookingCancelled
-Notification  -> cancellation notification sent by logging adapter
+docs/technical-debt.md
 ```
-
-The same scenarios can be tested through the Spring Statemachine prototype endpoint when the prototype profile is enabled.
-
-## Development philosophy
-
-The project is intentionally built in small milestones.
-
-The priority is to understand and demonstrate architectural decisions, not to add as many features as possible.
-
-Examples of conscious trade-offs:
-
-- notification sender adapters currently log messages instead of calling real Telegram or Max APIs
-- payment provider is fake but supports success and decline scenarios
-- cancellation after already approved payment does not implement refund yet
-- automatic inventory hold expiration is documented as future hardening
-- Spring Statemachine is introduced as a prototype, not as a replacement for the main flow
-- Temporal is compared in documentation, not added as infrastructure yet
-- booking-level contention test uses inventory/payment doubles instead of full multi-service e2e infrastructure
-- notification events are intentionally left out of the event timeline milestone to keep the integration slice focused
-
-This keeps the project understandable and useful for interview discussion.
-
-## Roadmap
-
-Completed milestones include:
-
-- booking service foundation
-- inventory service foundation
-- notification service and Kafka consumption
-- payment service and payment outbox
-- booking saga orchestration
-- saga retry and compensation
-- saga action extraction
-- Spring Statemachine prototype for orchestration comparison
-- inventory concurrency safety with atomic hold reservation
-- service-level integration tests with Testcontainers
-- GitHub Actions CI
-- event timeline read model across booking and payment events
-- cross-service correlation ID propagation
-
-Possible future milestones:
-
-- notification events in booking timeline
-- explicit saga lifecycle events and causation IDs
-- observability with structured logs, metrics, tracing, and optional centralized logging
-- load testing with k6
-- stronger idempotency and reconciliation for unknown outcomes
-- cancellation and refund process for already approved bookings
-- automatic inventory hold expiration
-- Temporal-based workflow prototype in a separate branch or milestone
-- richer integration, contract, and full e2e tests
 
 ## Interview discussion points
 
-This project can be used to discuss:
+This repository can be used to discuss:
 
 - how to structure Spring Boot services with Clean Architecture
-- how to model domain invariants and value objects
-- when to use PostgreSQL vs MongoDB
-- how transactional outbox helps with reliable event publication
-- how Kafka integrates services asynchronously
-- why gRPC can be useful for internal synchronous service calls
-- how saga orchestration differs from distributed transactions
+- how domain invariants are kept separate from infrastructure
+- why PostgreSQL and MongoDB are used for different data shapes
+- why transactional outbox is used before Kafka publication
+- how Kafka consumers are made idempotent
+- why booking uses a saga instead of a distributed transaction
 - how compensation differs from rollback
-- why payment authorization and approval are separate
-- why inventory hold and confirmation are separate
-- how handmade process manager compares with Spring Statemachine and Temporal
-- why read-check-save is unsafe under high contention
-- how atomic conditional updates protect finite inventory
-- how Testcontainers helps verify real persistence behavior
-- why CI is important for regression protection
+- how gRPC is used for internal synchronous calls
+- why gRPC deadlines are applied per call
+- how MDC context is propagated across HTTP, gRPC and Kafka boundaries
+- how Micrometer metrics expose business outcomes
+- how handmade orchestration compares with Spring Statemachine
+- how Testcontainers verifies persistence and concurrency behavior
+

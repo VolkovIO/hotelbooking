@@ -6,6 +6,13 @@ spring:
       enabled: ALWAYS
   profiles:
     group:
+      dev:
+        - booking-postgres
+        - inventory-grpc-client
+        - security-dev
+        - outbox-publisher
+        - outbox-kafka
+        - booking-saga-springstatemachine-prototype
       local:
         - booking-postgres
         - inventory-grpc-client
@@ -57,6 +64,7 @@ inventory:
     client:
       host: localhost
       port: 9090
+      deadline: ${INVENTORY_GRPC_CLIENT_DEADLINE:PT3S}
       tls:
         enabled: ${INVENTORY_GRPC_CLIENT_TLS_ENABLED:true}
         certificate-chain: ${INVENTORY_GRPC_CLIENT_CERTIFICATE_CHAIN:certs/dev/booking-service.crt}
@@ -87,3 +95,22 @@ app:
         batch-size: 20
         delay: 10s
         scheduler-fixed-delay-ms: 5000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+logging:
+  config: classpath:logback/hotelbooking-logback-spring.xml

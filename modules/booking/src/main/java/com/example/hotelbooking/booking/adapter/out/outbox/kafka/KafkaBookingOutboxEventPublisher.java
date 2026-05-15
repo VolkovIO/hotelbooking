@@ -3,6 +3,7 @@ package com.example.hotelbooking.booking.adapter.out.outbox.kafka;
 import com.example.hotelbooking.booking.application.event.BookingEventEnvelope;
 import com.example.hotelbooking.booking.application.event.BookingOutboxMessage;
 import com.example.hotelbooking.booking.application.exception.BookingOutboxPublicationException;
+import com.example.hotelbooking.booking.application.port.out.BookingObservabilityContext;
 import com.example.hotelbooking.booking.application.port.out.BookingOutboxEventPublisher;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -25,6 +26,7 @@ class KafkaBookingOutboxEventPublisher implements BookingOutboxEventPublisher {
 
   private final KafkaTemplate<String, String> kafkaTemplate;
   private final ObjectMapper objectMapper;
+  private final BookingObservabilityContext observabilityContext;
 
   @Value("${app.booking.outbox.kafka.topic-name:booking.events}")
   private String topicName;
@@ -34,6 +36,14 @@ class KafkaBookingOutboxEventPublisher implements BookingOutboxEventPublisher {
 
   @Override
   public void publish(BookingOutboxMessage message) throws BookingOutboxPublicationException {
+    try (BookingObservabilityContext.ContextScope ignored =
+        observabilityContext.openOutboxMessage(message)) {
+      publishWithContext(message);
+    }
+  }
+
+  private void publishWithContext(BookingOutboxMessage message)
+      throws BookingOutboxPublicationException {
     BookingEventEnvelope envelope = BookingEventEnvelope.from(message);
     String key = message.aggregateId().toString();
     String payload = serialize(envelope);

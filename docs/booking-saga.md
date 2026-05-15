@@ -1,13 +1,13 @@
 # Booking Saga Orchestration
 
-Current milestone: `v0.11.0`.
+Current milestone: `v0.14.0`.
 
 This document describes the booking saga flow and the two available orchestration implementations:
 
 1. Handmade process manager.
-2. Spring Statemachine prototype.
+2. Spring Statemachine comparison prototype.
 
-The default production-like flow is still the handmade process manager.
+The handmade process manager is the default production-like implementation. The Spring Statemachine endpoint exists to compare orchestration styles while reusing the same business actions.
 
 ## Why booking saga exists
 
@@ -18,24 +18,32 @@ Booking creation touches multiple services and databases:
 | Booking state | booking-service | PostgreSQL |
 | Inventory hold/reservation | inventory-service | MongoDB |
 | Payment state | payment-service | PostgreSQL |
-| Notification | notification-service | MongoDB |
+| Notification task | notification-service | MongoDB |
+| Timeline projection | audit-service | MongoDB |
 
-There is no distributed ACID transaction across all services.
+There is no distributed ACID transaction across these services.
 
-The saga coordinates the process through local transactions, retryable steps, and compensation.
+The saga coordinates the process through:
+
+- local transactions
+- external service calls
+- durable saga state
+- retryable steps
+- compensation steps
+- transactional outbox events
 
 ## Endpoints
 
-| Endpoint | Implementation | Availability |
+| Endpoint | Implementation | Purpose |
 |---|---|---|
-| `POST /api/v1/bookings/saga` | Handmade process manager | default |
-| `POST /api/v1/bookings/saga-statemachine` | Spring Statemachine prototype | only with profile `booking-saga-springstatemachine-prototype` |
+| `POST /api/v1/bookings/saga` | Handmade process manager | main booking saga endpoint |
+| `POST /api/v1/bookings/saga-statemachine` | Spring Statemachine | comparison and learning endpoint |
+
+In local demo runs, both endpoints can be enabled through the `dev` profile group.
 
 ## Shared saga actions
 
-In `v0.11.0`, saga step logic was extracted into reusable action classes.
-
-Both implementations reuse these actions:
+Both implementations reuse the same action classes:
 
 - `HoldInventorySagaAction`
 - `AuthorizePaymentSagaAction`
@@ -45,70 +53,78 @@ Both implementations reuse these actions:
 - `ReleaseInventorySagaAction`
 - `CancelBookingSagaAction`
 
-This means the comparison focuses on orchestration style, not duplicated business logic.
+This avoids duplicating business step logic. The comparison is about orchestration style, not different business behavior.
 
 ## Handmade process manager
 
-The handmade process manager is implemented by:
+Main classes:
 
 ```text
+StartBookingSagaService
 BookingSagaProcessManager
 BookingSagaActionRegistry
 BookingSagaAction classes
+BookingSagaRetryScheduler
 ```
 
-It owns:
+The process manager explicitly controls:
 
-- saga loop
-- current step execution
-- retry scheduling
-- compensation decision
-- exhausted retry handling
+- loading persisted saga state
+- executing the current step
+- detecting retryable failures
+- scheduling retries
+- deciding when compensation should start
+- moving to terminal states
 
-The process manager reads the persisted saga state and executes the action for the current step.
+Simplified model:
 
 ```mermaid
 flowchart TD
-    A[BookingSagaProcessManager] --> B[Load BookingSaga]
-    B --> C{Finished?}
-    C -- yes --> Z[Return saga]
-    C -- no --> D[BookingSagaActionRegistry]
-    D --> E[Execute action for currentStep]
-    E --> F{Retryable technical failure?}
-    F -- yes --> G[Schedule WAITING_RETRY]
-    F -- no --> H[Persist next saga state]
-    H --> C
+    A[Load BookingSaga] --> B{Finished?}
+    B -- yes --> Z[Return saga]
+    B -- no --> C[Find action by currentStep]
+    C --> D[Execute action]
+    D --> E{Success?}
+    E -- yes --> B
+    E -- retryable failure --> F[Schedule WAITING_RETRY]
+    E -- non-retryable failure --> G[FAILED]
+    E -- compensation needed --> H[COMPENSATING]
 ```
 
-## Spring Statemachine prototype
+Strengths:
 
-The Spring Statemachine prototype is available only with profile:
+- explicit Java code
+- simple to debug
+- no additional orchestration framework
+- retry and compensation behavior is visible
+- easy to explain transaction boundaries
+
+Trade-offs:
+
+- custom orchestration code must be maintained
+- complex workflows can become harder to visualize as code grows
+- no built-in workflow history UI
+
+## Spring Statemachine comparison prototype
+
+Main classes:
 
 ```text
-booking-saga-springstatemachine-prototype
-```
-
-Run example:
-
-```bash
-./gradlew :apps:booking-service-app:bootRun --args="--spring.profiles.active=local-kafka,booking-saga-springstatemachine-prototype"
-```
-
-Endpoint:
-
-```http
-POST /api/v1/bookings/saga-statemachine
+StartSpringStatemachineBookingSagaService
+SpringStatemachineBookingSagaService
+SpringStatemachineBookingSagaConfig
+SpringStatemachineBookingSagaActions
 ```
 
 The prototype uses:
 
 - states
 - transitions
-- actions
 - guards
-- a choice-state for payment authorization decision
+- actions
+- a decision state for payment authorization result
 
-It is used for comparison and learning. It is not the default production-like flow.
+Simplified state model:
 
 ```mermaid
 stateDiagram-v2
@@ -125,6 +141,20 @@ stateDiagram-v2
     COMPENSATED --> [*]
 ```
 
+Strengths:
+
+- flow structure is visible as states and transitions
+- branching can be expressed with guards/choice states
+- useful for comparing workflow styles
+- reuses the same saga actions as the handmade implementation
+
+Trade-offs:
+
+- adds framework complexity
+- action/guard execution can be less obvious than a simple loop
+- durable workflow history still has to be implemented explicitly
+- not a replacement for a full workflow engine such as Temporal
+
 ## Happy path
 
 ```mermaid
@@ -133,32 +163,27 @@ sequenceDiagram
     participant Booking as booking-service
     participant Inventory as inventory-service
     participant Payment as payment-service
-    participant Kafka as Kafka booking.events
+    participant Kafka as Kafka
+    participant Audit as audit-service
     participant Notification as notification-service
 
     Client->>Booking: POST /api/v1/bookings/saga
     Booking->>Booking: Create Booking and BookingSaga
-
-    Booking->>Inventory: placeHold(hotelId, roomTypeId, dates)
+    Booking->>Inventory: placeHold
     Inventory-->>Booking: holdId
     Booking->>Booking: Booking -> ON_HOLD
-    Booking->>Kafka: BookingPlacedOnHold
-
-    Booking->>Payment: authorize(bookingId, userId, amount, currency)
+    Booking->>Payment: authorize
     Payment-->>Booking: AUTHORIZED
-
-    Booking->>Inventory: confirmHold(holdId)
+    Booking->>Inventory: confirmHold
     Inventory-->>Booking: confirmed
-
     Booking->>Booking: Booking -> CONFIRMED
-    Booking->>Kafka: BookingConfirmed
-
-    Booking->>Payment: approve(paymentId)
+    Booking->>Payment: approve
     Payment-->>Booking: APPROVED
-
     Booking->>Booking: BookingSaga -> COMPLETED
-    Kafka-->>Notification: BookingConfirmed
-    Notification->>Notification: Create and send confirmation notification
+    Booking->>Kafka: BookingPlacedOnHold, BookingConfirmed
+    Payment->>Kafka: PaymentAuthorized, PaymentApproved
+    Kafka->>Audit: project timeline
+    Kafka->>Notification: create and deliver notification
 ```
 
 Final state:
@@ -179,29 +204,21 @@ sequenceDiagram
     participant Booking as booking-service
     participant Inventory as inventory-service
     participant Payment as payment-service
-    participant Kafka as Kafka booking.events
+    participant Kafka as Kafka
     participant Notification as notification-service
 
     Client->>Booking: POST /api/v1/bookings/saga
     Booking->>Booking: Create Booking and BookingSaga
-
-    Booking->>Inventory: placeHold(hotelId, roomTypeId, dates)
+    Booking->>Inventory: placeHold
     Inventory-->>Booking: holdId
-    Booking->>Booking: Booking -> ON_HOLD
-    Booking->>Kafka: BookingPlacedOnHold
-
-    Booking->>Payment: authorize(bookingId, userId, amount, currency)
+    Booking->>Payment: authorize
     Payment-->>Booking: DECLINED
-
-    Booking->>Inventory: releaseHold(holdId)
+    Booking->>Inventory: releaseHold
     Inventory-->>Booking: released
-
     Booking->>Booking: Booking -> CANCELLED
-    Booking->>Kafka: BookingCancelled
-
     Booking->>Booking: BookingSaga -> COMPENSATED
-    Kafka-->>Notification: BookingCancelled
-    Notification->>Notification: Create and send cancellation notification
+    Booking->>Kafka: BookingCancelled
+    Kafka->>Notification: create and deliver cancellation notification
 ```
 
 Final state:
@@ -214,154 +231,90 @@ Final state:
 | Inventory | hold released |
 | Notification | cancellation notification sent |
 
-## Retry path
+## Retry behavior
 
-Retry is implemented in the handmade process manager.
+Retryable failures include technical failures from external integrations such as inventory or payment calls.
 
-Retry metadata is stored in `booking_sagas`:
+When a retryable failure happens and retry attempts remain:
 
-| Field | Meaning |
-|---|---|
-| `status` | Current saga status |
-| `current_step` | Step to retry |
-| `retry_count` | Number of retries already scheduled |
-| `next_attempt_at` | When retry can run |
-
-Retryable errors include:
-
-- payment-service temporary unavailability
-- inventory-service temporary unavailability
-- HTTP/gRPC timeout
-- connection refused
-
-Business decisions are not retried:
-
-- payment declined
-- invalid inventory request
-- domain invariant violation
-
-```mermaid
-stateDiagram-v2
-    [*] --> STARTED
-    STARTED --> IN_PROGRESS: first step executed
-    IN_PROGRESS --> WAITING_RETRY: retryable technical failure
-    WAITING_RETRY --> IN_PROGRESS: scheduler resumes forward step
-    WAITING_RETRY --> COMPENSATING: scheduler resumes compensation step
-    IN_PROGRESS --> COMPENSATING: payment declined / compensation needed
-    IN_PROGRESS --> COMPLETED: all forward steps succeeded
-    COMPENSATING --> WAITING_RETRY: retryable compensation failure
-    COMPENSATING --> COMPENSATED: compensation completed
-    IN_PROGRESS --> FAILED: non-retryable failure
-    WAITING_RETRY --> FAILED: retries exhausted before compensation
-    COMPENSATING --> FAILED: compensation retries exhausted
+```text
+current step fails
+  -> saga status WAITING_RETRY
+  -> nextAttemptAt is set
+  -> retry scheduler later resumes processing
 ```
 
-## Why payment has two steps
+When retry attempts are exhausted, the saga either starts compensation or fails depending on the current step.
 
-Payment is split into two operations:
+## Transaction boundaries
 
-| Step | Meaning |
-|---|---|
-| `authorize` | Check and reserve ability to pay |
-| `approve` | Finalize payment after booking/inventory confirmation |
+The saga intentionally does not wrap the whole distributed operation in one local transaction.
 
-This prevents final payment approval before the room is confirmed.
+Instead:
 
-If later steps fail after authorization but before approval, the saga can cancel the authorization instead of issuing a refund.
+- local booking state changes are persisted transactionally
+- outbox rows are written in the same local transaction as booking state changes
+- external service calls happen outside local database transactions
+- retry and compensation handle failures across service boundaries
 
-## Why inventory has two steps
+This is the core reason for using a saga.
 
-Inventory is split into two operations:
+## Outbox integration
 
-| Step | Meaning |
-|---|---|
-| `placeHold` | Temporarily hold room while payment is authorized |
-| `confirmHold` | Convert hold into confirmed reservation |
+Booking lifecycle events are not published directly inside the business transaction.
 
-If payment is declined, the saga calls `releaseHold`.
+Flow:
 
-If a reservation is already confirmed and a later step fails, the saga uses `cancelConfirmedReservation`.
-
-## Booking outbox integration
-
-Saga-driven booking state changes must use the outbox-aware persistence boundary.
-
-Correct flow:
-
-```mermaid
-flowchart LR
-    A[Saga action] --> B[Booking aggregate state change]
-    B --> C[BookingStateChangePersistenceService]
-    C --> D[(bookings)]
-    C --> E[(booking_outbox)]
-    E --> F[BookingOutboxPollingService]
-    F --> G[Kafka booking.events]
-    G --> H[notification-service]
+```text
+booking state change
+  + booking_outbox insert
+  -> commit PostgreSQL transaction
+  -> scheduler claims outbox message
+  -> Kafka publisher sends event
+  -> outbox row marked PUBLISHED
 ```
 
-This ensures that saga-driven state changes produce the same booking events as regular booking use cases.
+This protects local consistency between booking state and integration event intent.
 
-## Manual verification
+## Observability
 
-### Handmade happy path
+Both saga implementations write MDC context:
 
-Endpoint:
-
-```http
-POST /api/v1/bookings/saga
+```text
+ctx[corr=... saga=... booking=... payment=... event=... type=...]
 ```
 
-Use payment amount below fake provider decline threshold.
+During saga execution, the important fields are:
 
-Expected:
-
-- booking `CONFIRMED`
-- saga `COMPLETED`
-- payment `APPROVED`
-- `BookingConfirmed` event
-- confirmation notification sent
-
-### Handmade declined path
-
-Endpoint:
-
-```http
-POST /api/v1/bookings/saga
+```text
+corr
+saga
+booking
+payment when available
 ```
 
-Use payment amount above fake provider decline threshold.
+Outbox publishing later uses:
 
-Expected:
-
-- booking `CANCELLED`
-- saga `COMPENSATED`
-- payment `DECLINED`
-- inventory hold released
-- `BookingCancelled` event
-- cancellation notification sent
-
-### Spring Statemachine prototype
-
-Start with profile:
-
-```bash
-./gradlew :apps:booking-service-app:bootRun --args="--spring.profiles.active=local-kafka,booking-saga-springstatemachine-prototype"
+```text
+corr
+booking
+event
+type
 ```
 
-Endpoint:
+Custom booking metrics include:
 
-```http
-POST /api/v1/bookings/saga-statemachine
+```text
+hotelbooking.booking.saga.processed
+hotelbooking.booking.saga.retry.scheduled
+hotelbooking.booking.outbox.published
+hotelbooking.booking.outbox.publication.failed
 ```
 
-Both happy path and declined path should produce the same business result as the handmade saga.
+The `implementation` metric tag distinguishes:
 
-## Current limitations
+```text
+handmade
+spring-statemachine
+```
 
-- Spring Statemachine prototype is not the default flow.
-- Spring Statemachine prototype is used for comparison and learning.
-- Temporal is documented as a production-grade alternative but not implemented in code.
-- Automatic inventory hold expiration is not implemented yet.
-- Cancellation after already approved payment does not refund payment yet.
-- Payment approval unknown outcome reconciliation is not implemented yet.
-- Distributed tracing is not implemented yet.

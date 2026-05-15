@@ -6,10 +6,7 @@ spring:
       enabled: ALWAYS
   profiles:
     group:
-      local:
-        - payment-postgres
-        - payment-dev
-      local-kafka:
+      dev:
         - payment-postgres
         - payment-dev
         - payment-outbox-publisher
@@ -35,3 +32,22 @@ springdoc:
     path: /swagger-ui.html
     operations-sorter: method
     tags-sorter: alpha
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+logging:
+  config: classpath:logback/hotelbooking-logback-spring.xml

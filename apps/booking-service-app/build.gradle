@@ -5,8 +5,10 @@ plugins {
 dependencies {
     implementation project(':modules:booking')
     implementation project(':modules:inventory-grpc-api')
+    implementation project(':modules:observability')
 
     implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-jdbc'
     implementation 'org.springframework.boot:spring-boot-starter-security'

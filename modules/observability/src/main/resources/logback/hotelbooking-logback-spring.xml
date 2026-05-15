@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+  <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+  <conversionRule
+    conversionWord="hbLevel"
+    class="com.example.hotelbooking.observability.logging.HotelbookingLogLevelColorConverter"/>
+
+  <!--
+    Development profile.
+
+    Human-readable console logs:
+    - ERROR and WARN are visually prominent;
+    - INFO stays neutral because it is the most common level;
+    - DEBUG is highlighted for development troubleshooting;
+    - observability identifiers in the end of the line;
+  -->
+  <springProfile name="dev">
+    <property name="CONSOLE_LOG_PATTERN"
+      value="%clr(%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX}){cyan} %hbLevel(%-5level) %clr([%15.15thread]){faint} %clr(%-72.72logger){blue} - %hbLevel(%msg) %clr(ctx[corr=%X{correlationId} saga=%X{sagaId} booking=%X{bookingId} payment=%X{paymentId} event=%X{eventId} type=%X{eventType}]){blue}%n%wEx"/>
+
+    <logger name="com.example.hotelbooking" level="DEBUG"/>
+
+    <logger name="org.apache.kafka.clients.producer.ProducerConfig" level="WARN"/>
+    <logger name="org.apache.kafka.clients.consumer.ConsumerConfig" level="WARN"/>
+    <logger name="org.apache.kafka.common.utils.AppInfoParser" level="WARN"/>
+    <logger name="org.apache.kafka.clients.Metadata" level="WARN"/>
+    <logger name="org.apache.kafka.clients.producer.internals.TransactionManager" level="WARN"/>
+  </springProfile>
+  <!--
+    Default/production-like profile.
+
+    No ANSI colors. Production logs are expected to be collected by Docker/Kubernetes and then
+    indexed by ELK, Loki, Splunk, Datadog, CloudWatch, etc.
+  -->
+  <springProfile name="!dev">
+    <property name="CONSOLE_LOG_PATTERN"
+      value="%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%15.15thread] %-72.72logger - %msg ctx[corr=%X{correlationId} saga=%X{sagaId} booking=%X{bookingId} payment=%X{paymentId} event=%X{eventId} type=%X{eventType}]%n%wEx"/>
+  </springProfile>
+
+  <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+  <root level="INFO">
+    <appender-ref ref="CONSOLE"/>
+  </root>
+
+</configuration>

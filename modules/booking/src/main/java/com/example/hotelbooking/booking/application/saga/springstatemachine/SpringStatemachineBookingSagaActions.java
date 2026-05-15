@@ -4,6 +4,7 @@ import com.example.hotelbooking.booking.application.exception.BookingNotFoundExc
 import com.example.hotelbooking.booking.application.exception.InventoryReservationException;
 import com.example.hotelbooking.booking.application.exception.RoomHoldFailedException;
 import com.example.hotelbooking.booking.application.payment.PaymentClientException;
+import com.example.hotelbooking.booking.application.port.out.BookingObservabilityContext;
 import com.example.hotelbooking.booking.application.port.out.BookingSagaRepository;
 import com.example.hotelbooking.booking.application.saga.BookingSaga;
 import com.example.hotelbooking.booking.application.saga.BookingSagaFailureReason;
@@ -26,6 +27,7 @@ class SpringStatemachineBookingSagaActions {
 
   private final BookingSagaActionRegistry actionRegistry;
   private final BookingSagaRepository sagaRepository;
+  private final BookingObservabilityContext observabilityContext;
 
   Action<SpringStatemachineBookingSagaState, SpringStatemachineBookingSagaEvent> holdInventory() {
     return executeAction();
@@ -69,15 +71,17 @@ class SpringStatemachineBookingSagaActions {
     return context -> {
       BookingSaga saga = SpringStatemachineBookingSagaContext.get(context);
 
-      try {
-        actionRegistry.execute(saga);
-      } catch (RoomHoldFailedException
-          | InventoryReservationException
-          | PaymentClientException
-          | BookingSagaStateException
-          | BookingDomainException
-          | BookingNotFoundException exception) {
-        markFailed(saga, exception);
+      try (BookingObservabilityContext.ContextScope ignored = observabilityContext.openSaga(saga)) {
+        try {
+          actionRegistry.execute(saga);
+        } catch (RoomHoldFailedException
+            | InventoryReservationException
+            | PaymentClientException
+            | BookingSagaStateException
+            | BookingDomainException
+            | BookingNotFoundException exception) {
+          markFailed(saga, exception);
+        }
       }
     };
   }

@@ -2,6 +2,8 @@ package com.example.hotelbooking.booking.application.saga.springstatemachine;
 
 import static com.example.hotelbooking.booking.application.saga.springstatemachine.SpringStatemachineBookingSagaEvent.NEXT;
 
+import com.example.hotelbooking.booking.application.port.out.BookingMetrics;
+import com.example.hotelbooking.booking.application.port.out.BookingObservabilityContext;
 import com.example.hotelbooking.booking.application.port.out.BookingSagaRepository;
 import com.example.hotelbooking.booking.application.saga.BookingSaga;
 import com.example.hotelbooking.booking.application.saga.BookingSagaFailureReason;
@@ -9,6 +11,7 @@ import com.example.hotelbooking.booking.application.saga.BookingSagaId;
 import com.example.hotelbooking.booking.application.saga.BookingSagaNotFoundException;
 import com.example.hotelbooking.booking.application.saga.BookingSagaStatus;
 import com.example.hotelbooking.booking.application.saga.BookingSagaStep;
+import java.util.Locale;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,11 +29,14 @@ import reactor.core.publisher.Mono;
 public class SpringStatemachineBookingSagaService {
 
   private static final int MAX_TRANSITIONS_PER_RUN = 20;
+  private static final String IMPLEMENTATION = "spring-statemachine";
 
   private final BookingSagaRepository sagaRepository;
   private final StateMachineFactory<
           SpringStatemachineBookingSagaState, SpringStatemachineBookingSagaEvent>
       stateMachineFactory;
+  private final BookingObservabilityContext observabilityContext;
+  private final BookingMetrics bookingMetrics;
 
   public BookingSaga process(BookingSagaId sagaId) {
     Objects.requireNonNull(sagaId, "sagaId must not be null");
@@ -38,6 +44,12 @@ public class SpringStatemachineBookingSagaService {
     BookingSaga saga =
         sagaRepository.findById(sagaId).orElseThrow(() -> new BookingSagaNotFoundException(sagaId));
 
+    try (BookingObservabilityContext.ContextScope ignored = observabilityContext.openSaga(saga)) {
+      return processWithContext(saga);
+    }
+  }
+
+  private BookingSaga processWithContext(BookingSaga saga) {
     StateMachine<SpringStatemachineBookingSagaState, SpringStatemachineBookingSagaEvent>
         stateMachine = stateMachineFactory.getStateMachine(saga.getId().value().toString());
 
@@ -100,6 +112,8 @@ public class SpringStatemachineBookingSagaService {
         saga.getStatus(),
         saga.getCurrentStep());
 
+    bookingMetrics.sagaProcessed(IMPLEMENTATION, outcome(saga));
+
     return saga;
   }
 
@@ -113,5 +127,9 @@ public class SpringStatemachineBookingSagaService {
         saga.getBookingId(),
         saga.getCurrentStep(),
         reason);
+  }
+
+  private String outcome(BookingSaga saga) {
+    return saga.getStatus().name().toLowerCase(Locale.ROOT);
   }
 }

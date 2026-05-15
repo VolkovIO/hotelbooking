@@ -15,6 +15,10 @@ final class InventorySecurityRules {
         .requestMatchers(
             "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**", "/v3/api-docs.yaml")
         .permitAll()
+        .requestMatchers("/actuator/health", "/actuator/health/**")
+        .permitAll()
+        .requestMatchers("/actuator/info", "/actuator/metrics", "/actuator/metrics/**")
+        .hasRole("ADMIN")
         .requestMatchers(HttpMethod.GET, "/api/v1/hotels", "/api/v1/hotels/**")
         .permitAll()
         .requestMatchers("/api/v1/admin/**")

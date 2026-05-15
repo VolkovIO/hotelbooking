@@ -11,6 +11,8 @@ import com.example.hotelbooking.notification.domain.NotificationPreference;
 import com.example.hotelbooking.notification.domain.NotificationSubject;
 import com.example.hotelbooking.notification.domain.NotificationType;
 import com.example.hotelbooking.notification.domain.NotificationUserId;
+import com.example.hotelbooking.notification.domain.SourceAggregateId;
+import com.example.hotelbooking.notification.domain.SourceCorrelationId;
 import com.example.hotelbooking.notification.domain.SourceEventId;
 import com.example.hotelbooking.notification.domain.SourceEventType;
 import java.util.Optional;
@@ -73,6 +75,8 @@ public class BookingEventNotificationService {
     return Notification.pending(
         new SourceEventId(event.eventId()),
         new SourceEventType(event.eventType()),
+        new SourceAggregateId(event.aggregateId()),
+        new SourceCorrelationId(event.correlationId()),
         notificationContent.type(),
         preference.getUserId(),
         preference.getChannel(),
@@ -89,6 +93,8 @@ public class BookingEventNotificationService {
     return Notification.skipped(
         new SourceEventId(event.eventId()),
         new SourceEventType(event.eventType()),
+        new SourceAggregateId(event.aggregateId()),
+        new SourceCorrelationId(event.correlationId()),
         notificationContent.type(),
         userId,
         notificationContent.subject(),

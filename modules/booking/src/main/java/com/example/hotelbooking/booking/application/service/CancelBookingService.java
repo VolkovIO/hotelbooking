@@ -5,11 +5,13 @@ import com.example.hotelbooking.booking.application.event.BookingLifecycleEvent;
 import com.example.hotelbooking.booking.application.exception.BookingAccessDeniedException;
 import com.example.hotelbooking.booking.application.exception.BookingNotFoundException;
 import com.example.hotelbooking.booking.application.port.in.CancelBookingUseCase;
+import com.example.hotelbooking.booking.application.port.out.BookingObservabilityContext;
 import com.example.hotelbooking.booking.application.port.out.BookingRepository;
 import com.example.hotelbooking.booking.application.port.out.InventoryReservationPort;
 import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.booking.domain.BookingDomainException;
 import com.example.hotelbooking.booking.domain.BookingStatus;
+import java.util.Objects;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,9 +27,19 @@ public class CancelBookingService implements CancelBookingUseCase {
   private final BookingRepository bookingRepository;
   private final InventoryReservationPort inventoryReservationPort;
   private final BookingStateChangePersistenceService bookingStateChangePersistenceService;
+  private final BookingObservabilityContext observabilityContext;
 
   @Override
   public Booking execute(CancelBookingCommand command) {
+    Objects.requireNonNull(command, "command must not be null");
+
+    try (BookingObservabilityContext.ContextScope ignored =
+        observabilityContext.openBooking(command.bookingId())) {
+      return executeWithContext(command);
+    }
+  }
+
+  private Booking executeWithContext(CancelBookingCommand command) {
     log.info(
         "Cancelling booking requested: bookingId={}, userId={}",
         command.bookingId(),

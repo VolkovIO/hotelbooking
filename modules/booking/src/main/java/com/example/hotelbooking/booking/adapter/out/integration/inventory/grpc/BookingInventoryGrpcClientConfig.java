@@ -2,14 +2,19 @@ package com.example.hotelbooking.booking.adapter.out.integration.inventory.grpc;
 
 import com.example.hotelbooking.inventory.grpc.v1.InventoryQueryServiceGrpc;
 import com.example.hotelbooking.inventory.grpc.v1.InventoryReservationServiceGrpc;
+import io.grpc.Channel;
+import io.grpc.ClientInterceptor;
+import io.grpc.ClientInterceptors;
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.netty.shaded.io.grpc.netty.GrpcSslContexts;
 import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder;
 import io.grpc.netty.shaded.io.netty.handler.ssl.SslContext;
 import java.io.File;
+import java.util.List;
 import javax.net.ssl.SSLException;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -52,14 +57,33 @@ public class BookingInventoryGrpcClientConfig {
 
   @Bean
   InventoryQueryServiceGrpc.InventoryQueryServiceBlockingStub inventoryQueryServiceBlockingStub(
-      ManagedChannel inventoryManagedChannel) {
-    return InventoryQueryServiceGrpc.newBlockingStub(inventoryManagedChannel);
+      ManagedChannel inventoryManagedChannel,
+      ObjectProvider<ClientInterceptor> grpcClientInterceptors) {
+    return InventoryQueryServiceGrpc.newBlockingStub(
+        inventoryClientChannel(inventoryManagedChannel, grpcClientInterceptors));
   }
 
   @Bean
   InventoryReservationServiceGrpc.InventoryReservationServiceBlockingStub
-      inventoryReservationServiceBlockingStub(ManagedChannel inventoryManagedChannel) {
-    return InventoryReservationServiceGrpc.newBlockingStub(inventoryManagedChannel);
+      inventoryReservationServiceBlockingStub(
+          ManagedChannel inventoryManagedChannel,
+          ObjectProvider<ClientInterceptor> grpcClientInterceptors) {
+    return InventoryReservationServiceGrpc.newBlockingStub(
+        inventoryClientChannel(inventoryManagedChannel, grpcClientInterceptors));
+  }
+
+  private Channel inventoryClientChannel(
+      ManagedChannel inventoryManagedChannel,
+      ObjectProvider<ClientInterceptor> grpcClientInterceptors) {
+    List<ClientInterceptor> interceptors = grpcClientInterceptors.orderedStream().toList();
+
+    if (interceptors.isEmpty()) {
+      return inventoryManagedChannel;
+    }
+
+    log.info("Configuring inventory gRPC client interceptors: count={}", interceptors.size());
+
+    return ClientInterceptors.intercept(inventoryManagedChannel, interceptors);
   }
 
   private File requiredFile(String path, String description) {

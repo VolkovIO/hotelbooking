@@ -1,6 +1,7 @@
 package com.example.hotelbooking.booking.application.saga.springstatemachine;
 
 import com.example.hotelbooking.booking.application.command.StartBookingSagaCommand;
+import com.example.hotelbooking.booking.application.port.out.BookingObservabilityContext;
 import com.example.hotelbooking.booking.application.saga.BookingSaga;
 import com.example.hotelbooking.booking.application.saga.BookingSagaStartPersistenceService;
 import java.util.Objects;
@@ -18,6 +19,7 @@ public class StartSpringStatemachineBookingSagaService
 
   private final BookingSagaStartPersistenceService startPersistenceService;
   private final SpringStatemachineBookingSagaService springStatemachineSagaService;
+  private final BookingObservabilityContext observabilityContext;
 
   @Override
   public BookingSaga execute(StartBookingSagaCommand command) {
@@ -25,11 +27,13 @@ public class StartSpringStatemachineBookingSagaService
 
     BookingSaga saga = startPersistenceService.createBookingAndSaga(command);
 
-    log.info(
-        "Spring Statemachine booking saga prototype started: sagaId={}, bookingId={}",
-        saga.getId().value(),
-        saga.getBookingId());
+    try (BookingObservabilityContext.ContextScope ignored = observabilityContext.openSaga(saga)) {
+      log.info(
+          "Spring Statemachine booking saga prototype started: sagaId={}, bookingId={}",
+          saga.getId().value(),
+          saga.getBookingId());
 
-    return springStatemachineSagaService.process(saga.getId());
+      return springStatemachineSagaService.process(saga.getId());
+    }
   }
 }

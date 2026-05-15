@@ -2,6 +2,8 @@ package com.example.hotelbooking.booking.application.service;
 
 import com.example.hotelbooking.booking.application.event.BookingOutboxMessage;
 import com.example.hotelbooking.booking.application.exception.BookingOutboxPublicationException;
+import com.example.hotelbooking.booking.application.port.out.BookingMetrics;
+import com.example.hotelbooking.booking.application.port.out.BookingObservabilityContext;
 import com.example.hotelbooking.booking.application.port.out.BookingOutboxEventPublisher;
 import com.example.hotelbooking.booking.application.port.out.BookingOutboxRepository;
 import java.time.Duration;
@@ -17,9 +19,13 @@ import org.springframework.stereotype.Service;
 public class BookingOutboxPollingService {
 
   private static final int MAX_ERROR_MESSAGE_LENGTH = 2_000;
+  private static final String FAILURE_RETRYABLE = "retryable";
+  private static final String FAILURE_TERMINAL = "terminal";
 
   private final BookingOutboxRepository bookingOutboxRepository;
   private final BookingOutboxEventPublisher bookingOutboxEventPublisher;
+  private final BookingObservabilityContext observabilityContext;
+  private final BookingMetrics bookingMetrics;
 
   public int publishAvailableMessages(
       int batchSize, int maxAttempts, Duration retryDelay, String lockedBy) {
@@ -41,17 +47,22 @@ public class BookingOutboxPollingService {
 
   private void publishSingleMessage(
       BookingOutboxMessage message, int maxAttempts, Duration retryDelay) {
-    try {
-      bookingOutboxEventPublisher.publish(message);
-      bookingOutboxRepository.markPublished(message.id(), Instant.now());
+    try (BookingObservabilityContext.ContextScope ignored =
+        observabilityContext.openOutboxMessage(message)) {
+      try {
+        bookingOutboxEventPublisher.publish(message);
+        bookingOutboxRepository.markPublished(message.id(), Instant.now());
 
-      log.info(
-          "Booking outbox message published: eventId={}, eventType={}, aggregateId={}",
-          message.id(),
-          message.eventType(),
-          message.aggregateId());
-    } catch (BookingOutboxPublicationException exception) {
-      handlePublishingFailure(message, maxAttempts, retryDelay, exception);
+        bookingMetrics.outboxMessagePublished(message.eventType());
+
+        log.info(
+            "Booking outbox message published: eventId={}, eventType={}, aggregateId={}",
+            message.id(),
+            message.eventType(),
+            message.aggregateId());
+      } catch (BookingOutboxPublicationException exception) {
+        handlePublishingFailure(message, maxAttempts, retryDelay, exception);
+      }
     }
   }
 
@@ -65,6 +76,7 @@ public class BookingOutboxPollingService {
 
     if (nextAttempt >= maxAttempts) {
       bookingOutboxRepository.markTerminalFailure(message.id(), errorMessage);
+      bookingMetrics.outboxMessagePublicationFailed(message.eventType(), FAILURE_TERMINAL);
 
       log.error(
           "Booking outbox message failed permanently: eventId={}, eventType={}, attempts={}",
@@ -77,6 +89,7 @@ public class BookingOutboxPollingService {
 
     bookingOutboxRepository.markRetryableFailure(
         message.id(), Instant.now().plus(retryDelay), errorMessage);
+    bookingMetrics.outboxMessagePublicationFailed(message.eventType(), FAILURE_RETRYABLE);
 
     log.warn(
         "Booking outbox message failed and will be retried: "

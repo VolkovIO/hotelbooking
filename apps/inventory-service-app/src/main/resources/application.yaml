@@ -6,7 +6,7 @@ spring:
       enabled: ALWAYS
   profiles:
     group:
-      local:
+      dev:
         - inventory-mongo
         - inventory-grpc-server
         - security-dev
@@ -28,3 +28,22 @@ inventory:
         trust-cert-collection: ${INVENTORY_GRPC_TRUST_CERT_COLLECTION:certs/dev/ca.crt}
       mtls:
         allowed-client-common-name: ${INVENTORY_GRPC_ALLOWED_CLIENT_COMMON_NAME:booking-service}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+logging:
+  config: classpath:logback/hotelbooking-logback-spring.xml

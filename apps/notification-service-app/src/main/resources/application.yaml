@@ -6,7 +6,7 @@ spring:
       enabled: ALWAYS
   profiles:
     group:
-      local:
+      dev:
         - notification-mongo
         - notification-kafka
         - notification-senders-logging
@@ -26,3 +26,22 @@ app:
       max-attempts: ${NOTIFICATION_DELIVERY_MAX_ATTEMPTS:3}
       retry-delay: ${NOTIFICATION_DELIVERY_RETRY_DELAY:30s}
       lock-duration: ${NOTIFICATION_DELIVERY_LOCK_DURATION:1m}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+logging:
+  config: classpath:logback/hotelbooking-logback-spring.xml

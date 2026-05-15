@@ -12,6 +12,7 @@ include 'modules:inventory-grpc-api'
 include 'modules:notification'
 include 'modules:payment'
 include 'modules:audit'
+include 'modules:observability'
 
 include 'apps:booking-service-app'
 include 'apps:inventory-service-app'

@@ -11,6 +11,8 @@ import com.example.hotelbooking.notification.domain.NotificationStatus;
 import com.example.hotelbooking.notification.domain.NotificationSubject;
 import com.example.hotelbooking.notification.domain.NotificationType;
 import com.example.hotelbooking.notification.domain.NotificationUserId;
+import com.example.hotelbooking.notification.domain.SourceAggregateId;
+import com.example.hotelbooking.notification.domain.SourceCorrelationId;
 import com.example.hotelbooking.notification.domain.SourceEventId;
 import com.example.hotelbooking.notification.domain.SourceEventType;
 import java.time.Instant;
@@ -44,6 +46,8 @@ class NotificationDocument {
 
   private String sourceEventId;
   private String sourceEventType;
+  private String sourceAggregateId;
+  private String sourceCorrelationId;
   private String type;
   private String userId;
   private String channel;
@@ -65,6 +69,8 @@ class NotificationDocument {
         notification.getId().value().toString(),
         notification.getSourceEventId().value().toString(),
         notification.getSourceEventType().value(),
+        notification.getSourceAggregateId().value().toString(),
+        notification.getSourceCorrelationId().value().toString(),
         notification.getType().name(),
         notification.getUserId().value().toString(),
         notification.getChannel().name(),
@@ -83,10 +89,14 @@ class NotificationDocument {
   }
 
   Notification toDomain() {
+    UUID eventId = UUID.fromString(sourceEventId);
+
     return Notification.restore(
         new NotificationId(UUID.fromString(id)),
-        new SourceEventId(UUID.fromString(sourceEventId)),
+        new SourceEventId(eventId),
         new SourceEventType(sourceEventType),
+        new SourceAggregateId(uuidOrFallback(sourceAggregateId, eventId)),
+        new SourceCorrelationId(uuidOrFallback(sourceCorrelationId, eventId)),
         NotificationType.valueOf(type),
         new NotificationUserId(UUID.fromString(userId)),
         NotificationChannel.valueOf(channel),
@@ -100,6 +110,14 @@ class NotificationDocument {
         createdAt,
         sentAt,
         updatedAt);
+  }
+
+  private static UUID uuidOrFallback(String value, UUID fallback) {
+    if (value == null || value.isBlank()) {
+      return fallback;
+    }
+
+    return UUID.fromString(value);
   }
 
   private static String lastErrorValue(Notification notification) {

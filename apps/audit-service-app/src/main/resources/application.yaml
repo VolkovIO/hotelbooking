@@ -6,7 +6,7 @@ spring:
       enabled: ALWAYS
   profiles:
     group:
-      local:
+      dev:
         - audit-mongo
         - audit-kafka
 
@@ -16,3 +16,22 @@ server:
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when_authorized
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+
+logging:
+  config: classpath:logback/hotelbooking-logback-spring.xml
