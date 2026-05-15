@@ -1,0 +1,134 @@
+:root {
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    sans-serif;
+  color: #172033;
+  background: #eef2f7;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+.app-shell {
+  min-height: 100vh;
+  padding: 48px 24px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.hero-card {
+  width: min(1120px, 100%);
+  padding: 40px;
+  border-radius: 28px;
+  background: #ffffff;
+  box-shadow: 0 24px 80px rgba(21, 35, 55, 0.12);
+}
+
+.hero-badge {
+  display: inline-flex;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: #edf4ff;
+  color: #2457a6;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+h1 {
+  margin: 24px 0 12px;
+  font-size: clamp(32px, 5vw, 56px);
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+
+.hero-text {
+  max-width: 760px;
+  margin: 0;
+  color: #5b677a;
+  font-size: 18px;
+  line-height: 1.7;
+}
+
+.status-grid {
+  margin-top: 32px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.info-card {
+  padding: 20px;
+  border: 1px solid #e3e8f0;
+  border-radius: 20px;
+  background: #f8fafc;
+}
+
+.info-card h2 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  color: #6b7280;
+}
+
+.info-value {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 17px;
+  font-weight: 800;
+  color: #172033;
+}
+
+.info-description {
+  margin: 12px 0 0;
+  color: #69778c;
+  line-height: 1.5;
+}
+
+.next-steps {
+  margin-top: 32px;
+  padding: 24px;
+  border-radius: 20px;
+  background: #172033;
+  color: #ffffff;
+}
+
+.next-steps h2 {
+  margin: 0 0 12px;
+}
+
+.next-steps ol {
+  margin: 0;
+  padding-left: 22px;
+  color: #d8e0ea;
+  line-height: 1.8;
+}
+
+@media (max-width: 980px) {
+  .status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    padding: 24px 12px;
+  }
+
+  .hero-card {
+    padding: 24px;
+    border-radius: 20px;
+  }
+
+  .status-grid {
+    grid-template-columns: 1fr;
+  }
+}

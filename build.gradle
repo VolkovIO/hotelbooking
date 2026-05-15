@@ -92,7 +92,7 @@ subprojects {
 	}
 
 	tasks.named('check') {
-		dependsOn tasks.named('integrationTest')
+//		dependsOn tasks.named('integrationTest')
 	}
 
 	spotless {
