@@ -1,6 +1,8 @@
 package com.example.hotelbooking.booking.adapter.out.persistence.postgres;
 
 import com.example.hotelbooking.booking.application.port.out.BookingRepository;
+import com.example.hotelbooking.booking.application.query.PageCriteria;
+import com.example.hotelbooking.booking.application.query.PagedResult;
 import com.example.hotelbooking.booking.domain.Booking;
 import com.example.hotelbooking.booking.domain.BookingId;
 import com.example.hotelbooking.booking.domain.BookingStatus;
@@ -8,6 +10,7 @@ import com.example.hotelbooking.booking.domain.StayPeriod;
 import com.example.hotelbooking.booking.domain.UserId;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
@@ -94,6 +97,48 @@ class JdbcBookingRepository implements BookingRepository {
         .param("id", bookingId.value())
         .query(this::mapRow)
         .optional();
+  }
+
+  @Override
+  public PagedResult<Booking> findByUserId(UserId userId, PageCriteria pageCriteria) {
+    long totalElements =
+        jdbcClient
+            .sql(
+                """
+                select count(*)
+                  from bookings
+                 where user_id = :userId
+                """)
+            .param("userId", userId.value())
+            .query(Long.class)
+            .single();
+
+    List<Booking> content =
+        jdbcClient
+            .sql(
+                """
+                select id,
+                       user_id,
+                       hotel_id,
+                       room_type_id,
+                       check_in,
+                       check_out,
+                       guest_count,
+                       status,
+                       hold_id
+                  from bookings
+                 where user_id = :userId
+                 order by created_at desc, id desc
+                 limit :limit
+                offset :offset
+                """)
+            .param("userId", userId.value())
+            .param("limit", pageCriteria.size())
+            .param("offset", pageCriteria.offset())
+            .query(this::mapRow)
+            .list();
+
+    return new PagedResult<>(content, pageCriteria.page(), pageCriteria.size(), totalElements);
   }
 
   @SuppressWarnings("unused")
