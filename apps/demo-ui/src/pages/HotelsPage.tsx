@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import {
+  bookingApi,
   inventoryApi,
+  type BookingSagaResponse,
   type HotelResponse,
   type HotelSummaryResponse,
   type RoomAvailabilityResponse,
   type RoomTypeResponse,
+  type SagaEngine,
   type UUID,
 } from "../api";
 import { ErrorMessage } from "../components/ErrorMessage";
@@ -20,19 +23,25 @@ const DEFAULT_FROM = "2030-06-11";
 const DEFAULT_TO = "2030-06-12";
 
 /**
- * HotelsPage is the first real backend-integrated screen.
+ * Default payment amount for the happy path.
  *
- * It now supports two related flows:
+ * In our fake payment provider:
+ * - amount <= 50000 usually succeeds
+ * - amount > 50000 demonstrates payment decline / compensation flow
+ */
+const DEFAULT_PAYMENT_AMOUNT = 1500;
+
+/**
+ * HotelsPage currently contains the whole first demo flow:
  *
- * 1. Hotel catalog:
- *    GET /api/v1/hotels?limit=20
+ * 1. Load hotels from inventory-service.
+ * 2. Open hotel details.
+ * 3. Select room type.
+ * 4. Check availability.
+ * 5. Start booking saga.
  *
- * 2. Hotel details and room availability:
- *    GET /api/v1/hotels/{hotelId}
- *    GET /api/v1/hotels/{hotelId}/room-types/{roomTypeId}/availability?from=...&to=...
- *
- * We still keep this in one page to avoid introducing routing too early.
- * Later we can split it into HotelsPage, HotelDetailsPage and BookingForm.
+ * This is intentionally kept in one file for the first UI iteration.
+ * Later, after the flow is stable, we can split it into smaller pages/components.
  */
 export function HotelsPage() {
   const [hotels, setHotels] = useState<HotelSummaryResponse[]>([]);
@@ -51,6 +60,14 @@ export function HotelsPage() {
   const [availabilityLoading, setAvailabilityLoading] = useState(false);
   const [availabilityError, setAvailabilityError] = useState<unknown>(null);
 
+  const [guestCount, setGuestCount] = useState(1);
+  const [paymentAmount, setPaymentAmount] = useState(DEFAULT_PAYMENT_AMOUNT);
+  const [paymentCurrency, setPaymentCurrency] = useState("RUB");
+  const [sagaEngine, setSagaEngine] = useState<SagaEngine>("handmade");
+  const [bookingSagaResult, setBookingSagaResult] = useState<BookingSagaResponse | null>(null);
+  const [bookingSagaLoading, setBookingSagaLoading] = useState(false);
+  const [bookingSagaError, setBookingSagaError] = useState<unknown>(null);
+
   const selectedRoomType = useMemo(
     () =>
       selectedHotel?.roomTypes.find((roomType) => roomType.roomTypeId === selectedRoomTypeId) ??
@@ -59,10 +76,20 @@ export function HotelsPage() {
   );
 
   /**
-   * Initial catalog loading.
+   * A very small client-side check.
    *
-   * useEffect with [] runs once when the component is mounted.
+   * The backend is still the source of truth. This check only helps the demo UI
+   * avoid sending obviously incomplete requests.
    */
+  const canStartBookingSaga =
+    selectedHotel !== null &&
+    selectedRoomTypeId !== null &&
+    availabilityFrom.length > 0 &&
+    availabilityTo.length > 0 &&
+    guestCount > 0 &&
+    paymentAmount > 0 &&
+    paymentCurrency.trim().length > 0;
+
   useEffect(() => {
     let cancelled = false;
 
@@ -100,18 +127,15 @@ export function HotelsPage() {
       setSelectedHotel(null);
       setSelectedRoomTypeId(null);
       setAvailability([]);
+      setBookingSagaResult(null);
       setHotelDetailsLoading(true);
       setHotelDetailsError(null);
       setAvailabilityError(null);
+      setBookingSagaError(null);
 
       const hotel = await inventoryApi.getHotelById(hotelId);
 
       setSelectedHotel(hotel);
-
-      /**
-       * Small usability shortcut:
-       * if the hotel has at least one room type, select the first one automatically.
-       */
       setSelectedRoomTypeId(hotel.roomTypes[0]?.roomTypeId ?? null);
     } catch (requestError) {
       setHotelDetailsError(requestError);
@@ -145,6 +169,37 @@ export function HotelsPage() {
     }
   }
 
+  async function startBookingSaga() {
+    if (selectedHotel === null || selectedRoomTypeId === null) {
+      return;
+    }
+
+    try {
+      setBookingSagaLoading(true);
+      setBookingSagaError(null);
+      setBookingSagaResult(null);
+
+      const result = await bookingApi.startBookingSaga(
+        {
+          hotelId: selectedHotel.hotelId,
+          roomTypeId: selectedRoomTypeId,
+          checkIn: availabilityFrom,
+          checkOut: availabilityTo,
+          guestCount,
+          paymentAmount,
+          paymentCurrency: paymentCurrency.trim().toUpperCase(),
+        },
+        sagaEngine,
+      );
+
+      setBookingSagaResult(result);
+    } catch (requestError) {
+      setBookingSagaError(requestError);
+    } finally {
+      setBookingSagaLoading(false);
+    }
+  }
+
   return (
     <section className="page-section">
       <div className="page-header">
@@ -152,8 +207,8 @@ export function HotelsPage() {
           <p className="eyebrow">Inventory catalog</p>
           <h1>Hotels</h1>
           <p className="page-description">
-            Select a hotel, inspect its room types and check availability before
-            starting the booking saga.
+            Select a hotel, inspect its room types, check availability and start
+            the booking saga.
           </p>
         </div>
 
@@ -227,10 +282,23 @@ export function HotelsPage() {
         availability={availability}
         availabilityLoading={availabilityLoading}
         availabilityError={availabilityError}
+        guestCount={guestCount}
+        paymentAmount={paymentAmount}
+        paymentCurrency={paymentCurrency}
+        sagaEngine={sagaEngine}
+        canStartBookingSaga={canStartBookingSaga}
+        bookingSagaLoading={bookingSagaLoading}
+        bookingSagaError={bookingSagaError}
+        bookingSagaResult={bookingSagaResult}
         onRoomTypeChange={setSelectedRoomTypeId}
         onAvailabilityFromChange={setAvailabilityFrom}
         onAvailabilityToChange={setAvailabilityTo}
+        onGuestCountChange={setGuestCount}
+        onPaymentAmountChange={setPaymentAmount}
+        onPaymentCurrencyChange={setPaymentCurrency}
+        onSagaEngineChange={setSagaEngine}
         onCheckAvailability={checkAvailability}
+        onStartBookingSaga={startBookingSaga}
       />
     </section>
   );
@@ -247,20 +315,25 @@ type HotelDetailsPanelProps = {
   availability: RoomAvailabilityResponse[];
   availabilityLoading: boolean;
   availabilityError: unknown;
+  guestCount: number;
+  paymentAmount: number;
+  paymentCurrency: string;
+  sagaEngine: SagaEngine;
+  canStartBookingSaga: boolean;
+  bookingSagaLoading: boolean;
+  bookingSagaError: unknown;
+  bookingSagaResult: BookingSagaResponse | null;
   onRoomTypeChange: (roomTypeId: UUID) => void;
   onAvailabilityFromChange: (value: string) => void;
   onAvailabilityToChange: (value: string) => void;
+  onGuestCountChange: (value: number) => void;
+  onPaymentAmountChange: (value: number) => void;
+  onPaymentCurrencyChange: (value: string) => void;
+  onSagaEngineChange: (value: SagaEngine) => void;
   onCheckAvailability: () => void;
+  onStartBookingSaga: () => void;
 };
 
-/**
- * HotelDetailsPanel is intentionally kept as a separate component inside the same file.
- *
- * This is a common React refactoring step:
- * once JSX grows, extract a smaller component with explicit props.
- *
- * In Java terms, props are similar to constructor parameters for a small immutable view object.
- */
 function HotelDetailsPanel({
   selectedHotel,
   loading,
@@ -272,10 +345,23 @@ function HotelDetailsPanel({
   availability,
   availabilityLoading,
   availabilityError,
+  guestCount,
+  paymentAmount,
+  paymentCurrency,
+  sagaEngine,
+  canStartBookingSaga,
+  bookingSagaLoading,
+  bookingSagaError,
+  bookingSagaResult,
   onRoomTypeChange,
   onAvailabilityFromChange,
   onAvailabilityToChange,
+  onGuestCountChange,
+  onPaymentAmountChange,
+  onPaymentCurrencyChange,
+  onSagaEngineChange,
   onCheckAvailability,
+  onStartBookingSaga,
 }: HotelDetailsPanelProps) {
   if (loading) {
     return (
@@ -299,7 +385,8 @@ function HotelDetailsPanel({
         <p className="eyebrow">Hotel details</p>
         <h2>Select a hotel</h2>
         <p className="muted-text">
-          Click Open details on any hotel card to inspect room types and check availability.
+          Click Open details on any hotel card to inspect room types, check availability and create
+          a booking through saga.
         </p>
       </div>
     );
@@ -312,8 +399,8 @@ function HotelDetailsPanel({
           <p className="eyebrow">{selectedHotel.city}</p>
           <h2>{selectedHotel.name}</h2>
           <p className="muted-text">
-            Choose a room type and date range. The next UI step will use these values to create a
-            booking saga.
+            Choose a room type and date range. Then start the booking saga to reserve inventory,
+            authorize payment and confirm booking.
           </p>
         </div>
       </div>
@@ -397,6 +484,22 @@ function HotelDetailsPanel({
           Availability is not loaded yet. Select dates and click Check availability.
         </div>
       )}
+
+      <BookingSagaForm
+        guestCount={guestCount}
+        paymentAmount={paymentAmount}
+        paymentCurrency={paymentCurrency}
+        sagaEngine={sagaEngine}
+        canStartBookingSaga={canStartBookingSaga}
+        loading={bookingSagaLoading}
+        error={bookingSagaError}
+        result={bookingSagaResult}
+        onGuestCountChange={onGuestCountChange}
+        onPaymentAmountChange={onPaymentAmountChange}
+        onPaymentCurrencyChange={onPaymentCurrencyChange}
+        onSagaEngineChange={onSagaEngineChange}
+        onStartBookingSaga={onStartBookingSaga}
+      />
     </div>
   );
 }
@@ -410,9 +513,7 @@ function AvailabilityTable({ availability }: AvailabilityTableProps) {
     <div className="table-card">
       <div className="table-header">
         <h3>Availability</h3>
-        <p className="muted-text">
-          availableRooms = totalRooms - heldRooms - bookedRooms
-        </p>
+        <p className="muted-text">availableRooms = totalRooms - heldRooms - bookedRooms</p>
       </div>
 
       <div className="responsive-table">
@@ -446,4 +547,170 @@ function AvailabilityTable({ availability }: AvailabilityTableProps) {
       </div>
     </div>
   );
+}
+
+type BookingSagaFormProps = {
+  guestCount: number;
+  paymentAmount: number;
+  paymentCurrency: string;
+  sagaEngine: SagaEngine;
+  canStartBookingSaga: boolean;
+  loading: boolean;
+  error: unknown;
+  result: BookingSagaResponse | null;
+  onGuestCountChange: (value: number) => void;
+  onPaymentAmountChange: (value: number) => void;
+  onPaymentCurrencyChange: (value: string) => void;
+  onSagaEngineChange: (value: SagaEngine) => void;
+  onStartBookingSaga: () => void;
+};
+
+function BookingSagaForm({
+  guestCount,
+  paymentAmount,
+  paymentCurrency,
+  sagaEngine,
+  canStartBookingSaga,
+  loading,
+  error,
+  result,
+  onGuestCountChange,
+  onPaymentAmountChange,
+  onPaymentCurrencyChange,
+  onSagaEngineChange,
+  onStartBookingSaga,
+}: BookingSagaFormProps) {
+  return (
+    <div className="booking-saga-panel">
+      <div className="booking-saga-header">
+        <div>
+          <p className="eyebrow">Booking saga</p>
+          <h3>Create booking</h3>
+          <p className="muted-text">
+            This calls booking-service and starts the distributed flow:
+            inventory hold → payment authorization → booking confirmation.
+          </p>
+        </div>
+
+        <div className="demo-hint">
+          <strong>Demo rule</strong>
+          <span>paymentAmount &gt; 50000 demonstrates payment decline.</span>
+        </div>
+      </div>
+
+      <div className="booking-form-grid">
+        <label>
+          <span>Guests</span>
+          <input
+            min={1}
+            type="number"
+            value={guestCount}
+            onChange={(event) => onGuestCountChange(toPositiveNumber(event.target.value, 1))}
+          />
+        </label>
+
+        <label>
+          <span>Payment amount</span>
+          <input
+            min={1}
+            type="number"
+            value={paymentAmount}
+            onChange={(event) =>
+              onPaymentAmountChange(toPositiveNumber(event.target.value, DEFAULT_PAYMENT_AMOUNT))
+            }
+          />
+        </label>
+
+        <label>
+          <span>Currency</span>
+          <input
+            maxLength={3}
+            value={paymentCurrency}
+            onChange={(event) => onPaymentCurrencyChange(event.target.value)}
+          />
+        </label>
+
+        <label>
+          <span>Saga engine</span>
+          <select
+            value={sagaEngine}
+            onChange={(event) => onSagaEngineChange(event.target.value as SagaEngine)}
+          >
+            <option value="handmade">Handmade saga</option>
+            <option value="spring-statemachine">Spring Statemachine prototype</option>
+          </select>
+        </label>
+      </div>
+
+      <button
+        className="primary-button primary-button-full"
+        type="button"
+        disabled={!canStartBookingSaga || loading}
+        onClick={onStartBookingSaga}
+      >
+        {loading ? "Starting booking saga..." : "Start booking saga"}
+      </button>
+
+      {error !== null && <ErrorMessage error={error} />}
+
+      {result !== null && <BookingSagaResult result={result} />}
+    </div>
+  );
+}
+
+type BookingSagaResultProps = {
+  result: BookingSagaResponse;
+};
+
+function BookingSagaResult({ result }: BookingSagaResultProps) {
+  return (
+    <div className="booking-result-card">
+      <div className="booking-result-header">
+        <div>
+          <p className="eyebrow">Saga started</p>
+          <h3>Booking flow accepted</h3>
+        </div>
+
+        <span className="status-badge">{result.sagaStatus}</span>
+      </div>
+
+      <div className="result-grid">
+        <ResultItem label="sagaId" value={result.sagaId} />
+        <ResultItem label="bookingId" value={result.bookingId} />
+        <ResultItem label="currentStep" value={result.currentStep} />
+        <ResultItem label="paymentId" value={result.paymentId ?? "not assigned yet"} />
+        <ResultItem label="retryCount" value={String(result.retryCount)} />
+        <ResultItem label="lastFailureReason" value={result.lastFailureReason ?? "none"} />
+      </div>
+
+      <p className="muted-text">
+        The saga may continue asynchronously. Later we will add My bookings and Audit timeline
+        screens to observe status changes.
+      </p>
+    </div>
+  );
+}
+
+type ResultItemProps = {
+  label: string;
+  value: string;
+};
+
+function ResultItem({ label, value }: ResultItemProps) {
+  return (
+    <div className="result-item">
+      <span>{label}</span>
+      <code>{value}</code>
+    </div>
+  );
+}
+
+function toPositiveNumber(value: string, fallback: number): number {
+  const parsed = Number(value);
+
+  if (Number.isNaN(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return parsed;
 }
