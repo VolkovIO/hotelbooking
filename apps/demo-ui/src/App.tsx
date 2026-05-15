@@ -1,49 +1,45 @@
 import { useState } from "react";
 import { appConfig } from "./config/appConfig";
 import { HotelsPage } from "./pages/HotelsPage";
+import { InventoryAdminPage } from "./pages/InventoryAdminPage";
 import { MyBookingsPage } from "./pages/MyBookingsPage";
 
-type AppPage = "hotels" | "my-bookings";
+type AppPage = "hotels" | "my-bookings" | "inventory-admin";
 
-/**
- * App is the root React component.
- *
- * We intentionally do not add React Router yet.
- * For this small demo UI a local page state is enough:
- *
- * - hotels
- * - my-bookings
- *
- * Later, if the UI grows, this can be replaced with proper routing.
- */
 function App() {
   const [currentPage, setCurrentPage] = useState<AppPage>("hotels");
 
   return (
     <main className="app-shell">
-      <header className="top-bar">
+      <header className="top-bar top-bar-compact">
         <div>
           <div className="hero-badge">Hotel Booking Demo UI</div>
-          <h1 className="app-title">Distributed hotel booking platform</h1>
-          <p className="app-subtitle">
-            Demo client for booking saga, inventory availability, payment flow and audit timeline.
-          </p>
+          <div className="app-highlights" aria-label="Demo capabilities">
+            <span>Booking saga</span>
+            <span>Inventory availability</span>
+            <span>Payment flow</span>
+            <span>Audit timeline</span>
+          </div>
         </div>
 
-        <div className="auth-card">
-          <span>Auth mode</span>
+        <div className="auth-card auth-card-compact">
+          <span>Auth</span>
           <strong>{appConfig.authMode}</strong>
           <small>{appConfig.demoUserEmail}</small>
         </div>
       </header>
 
-      <section className="service-strip">
-        <ServiceLink label="Booking" value={appConfig.bookingServiceBaseUrl} />
-        <ServiceLink label="Inventory" value={appConfig.inventoryServiceBaseUrl} />
-        <ServiceLink label="Audit" value={appConfig.auditServiceBaseUrl} />
-      </section>
+      <details className="runtime-details">
+        <summary>Runtime service routes</summary>
 
-      <nav className="main-navigation" aria-label="Demo UI navigation">
+        <section className="service-strip service-strip-compact">
+          <ServiceLink label="Booking" value={appConfig.bookingServiceBaseUrl} />
+          <ServiceLink label="Inventory" value={appConfig.inventoryServiceBaseUrl} />
+          <ServiceLink label="Audit" value={appConfig.auditServiceBaseUrl} />
+        </section>
+      </details>
+
+      <nav className="main-navigation main-navigation-three main-navigation-compact" aria-label="Demo UI navigation">
         <button
           className={currentPage === "hotels" ? "nav-tab nav-tab-active" : "nav-tab"}
           type="button"
@@ -52,7 +48,7 @@ function App() {
           <span className="nav-tab-icon">🏨</span>
           <span>
             <strong>Hotels</strong>
-            <small>Catalog & booking saga</small>
+            <small>Catalog & booking</small>
           </span>
         </button>
 
@@ -64,13 +60,26 @@ function App() {
           <span className="nav-tab-icon">📋</span>
           <span>
             <strong>My bookings</strong>
-            <small>Status, timeline & cancel</small>
+            <small>Status & timeline</small>
+          </span>
+        </button>
+
+        <button
+          className={currentPage === "inventory-admin" ? "nav-tab nav-tab-active" : "nav-tab"}
+          type="button"
+          onClick={() => setCurrentPage("inventory-admin")}
+        >
+          <span className="nav-tab-icon">🛠️</span>
+          <span>
+            <strong>Inventory Admin</strong>
+            <small>Hotels & availability</small>
           </span>
         </button>
       </nav>
 
       {currentPage === "hotels" && <HotelsPage />}
       {currentPage === "my-bookings" && <MyBookingsPage />}
+      {currentPage === "inventory-admin" && <InventoryAdminPage />}
     </main>
   );
 }
