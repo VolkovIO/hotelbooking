@@ -21,6 +21,7 @@ The goal is not to build a commercial booking platform. The goal is to demonstra
 - concurrency protection for finite inventory
 - local observability: Actuator, MDC logs, correlation IDs, Micrometer metrics
 - GitHub Actions CI
+- Demo UI application
 
 The project is intentionally developed in small milestones. Each milestone adds a focused architectural capability and keeps the implementation understandable.
 
@@ -29,22 +30,11 @@ The project is intentionally developed in small milestones. Each milestone adds 
 Current version:
 
 ```text
-v0.14.0 — Minimal observability and operational readiness
+v0.15.0 — Minimal Demo UI application
 ```
-
-This milestone adds a minimal but practical observability layer:
-
-- Spring Boot Actuator health, readiness and metrics endpoints
-- shared MDC logging context
-- request and business correlation identifiers in logs
-- gRPC metadata propagation for booking -> inventory calls
-- Kafka consumer MDC context for audit and notification services
-- notification delivery context restored from persisted notification tasks
-- Micrometer business metrics for booking, payment and notification flows
-- per-call gRPC deadlines for inventory calls
-- a standardized local `dev` profile group
-
-The purpose is to make the distributed booking flow easier to follow without introducing a full monitoring stack such as Prometheus, Grafana, Loki, ELK or OpenTelemetry yet.
+```text
+docs/v0.15.0-release-notes.md
+```
 
 ## Services
 
@@ -424,6 +414,77 @@ These trade-offs are documented in:
 ```text
 docs/technical-debt.md
 ```
+
+## Demo UI
+
+The project includes a minimal React + Vite + TypeScript demo UI in:
+
+```text
+apps/demo-ui
+```
+
+The UI demonstrates the main local business flow:
+
+```text
+Inventory Admin -> Hotels -> Booking saga -> My bookings -> Audit timeline
+```
+
+It is a thin client for the backend services, not a replacement for API-level tests.
+
+### Auth modes
+
+The UI supports two modes:
+
+| Mode | UI behavior | Booking service profile |
+|---|---|---|
+| `google` | signs in with Google and sends `Authorization: Bearer <google-id-token>` | `dev-jwt` |
+| `demo` | does not send an authorization header; backend uses demo user | `dev` |
+
+The committed default environment uses Google mode:
+
+```text
+apps/demo-ui/.env
+```
+
+To run locally without Google, create:
+
+```text
+apps/demo-ui/.env.local
+```
+
+with:
+
+```env
+VITE_AUTH_MODE=demo
+```
+
+Do not commit `.env.local`.
+
+### Run UI locally
+
+```bash
+cd apps/demo-ui
+npm install
+npm run dev
+```
+
+Open:
+
+```text
+http://localhost:5173
+```
+
+The UI uses Vite proxy routes:
+
+| UI route | Backend service |
+|---|---|
+| `/booking-api` | booking-service |
+| `/inventory-api` | inventory-service |
+| `/audit-api` | audit-service |
+
+See `apps/demo-ui/README.md` and `docs/demo-ui-runbook.md` for the full demo scenario.
+
+
 
 ## Interview discussion points
 
