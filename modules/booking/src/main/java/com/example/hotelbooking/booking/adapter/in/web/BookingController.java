@@ -8,8 +8,12 @@ import com.example.hotelbooking.booking.application.port.in.CancelBookingUseCase
 import com.example.hotelbooking.booking.application.port.in.ConfirmBookingUseCase;
 import com.example.hotelbooking.booking.application.port.in.CreateBookingUseCase;
 import com.example.hotelbooking.booking.application.port.in.GetBookingByIdUseCase;
+import com.example.hotelbooking.booking.application.port.in.GetCurrentUserBookingsUseCase;
 import com.example.hotelbooking.booking.application.port.in.StartBookingSagaUseCase;
 import com.example.hotelbooking.booking.application.query.GetBookingByIdQuery;
+import com.example.hotelbooking.booking.application.query.GetCurrentUserBookingsQuery;
+import com.example.hotelbooking.booking.application.query.PageCriteria;
+import com.example.hotelbooking.booking.application.query.PagedResult;
 import com.example.hotelbooking.booking.application.saga.BookingSaga;
 import com.example.hotelbooking.booking.application.security.CurrentUserProvider;
 import com.example.hotelbooking.booking.domain.Booking;
@@ -25,6 +29,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -37,6 +42,7 @@ public class BookingController {
   private final CurrentUserProvider currentUserProvider;
   private final CreateBookingUseCase createBookingUseCase;
   private final GetBookingByIdUseCase getBookingByIdUseCase;
+  private final GetCurrentUserBookingsUseCase getCurrentUserBookingsUseCase;
   private final CancelBookingUseCase cancelBookingUseCase;
   private final ConfirmBookingUseCase confirmBookingUseCase;
   private final StartBookingSagaUseCase startBookingSagaUseCase;
@@ -68,12 +74,35 @@ public class BookingController {
   }
 
   @Operation(
+      summary = "Get current user bookings",
+      description =
+          """
+          Returns a paged list of bookings owned by the currently authenticated user.
+
+          In the dev security profile the current user is the fixed demo user.
+          In the Google JWT profile the current user is resolved from the authenticated Google identity.
+
+          The endpoint is intended for the demo UI "My bookings" page.
+          """)
+  @GetMapping("/my")
+  public BookingPageResponse getMyBookings(
+      @RequestParam(defaultValue = "0") int page, @RequestParam(defaultValue = "20") int size) {
+    PagedResult<Booking> result =
+        getCurrentUserBookingsUseCase.execute(
+            new GetCurrentUserBookingsQuery(
+                currentUserProvider.currentUser().userId(), new PageCriteria(page, size)));
+
+    return BookingPageResponse.from(result);
+  }
+
+  @Operation(
       summary = "Get booking by id",
       description =
           """
           Returns a booking by its unique identifier.
 
           If the booking does not exist, the API returns 404 Not Found.
+          If the booking belongs to another user, the API returns 403 Forbidden.
           """)
   @GetMapping("/{bookingId}")
   public BookingResponse getById(@PathVariable String bookingId) {

@@ -13,6 +13,13 @@ spring:
         - outbox-publisher
         - outbox-kafka
         - booking-saga-springstatemachine-prototype
+      dev-jwt:
+        - booking-postgres
+        - inventory-grpc-client
+        - security-jwt
+        - outbox-publisher
+        - outbox-kafka
+        - booking-saga-springstatemachine-prototype
       local:
         - booking-postgres
         - inventory-grpc-client
