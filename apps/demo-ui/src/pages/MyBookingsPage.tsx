@@ -7,6 +7,7 @@ import {
   type TimelineEventResponse,
   type UUID,
 } from "../api";
+import { useAuth } from "../auth/AuthContext";
 import { ErrorMessage } from "../components/ErrorMessage";
 import { LoadingState } from "../components/LoadingState";
 import { StatusBadge } from "../components/StatusBadge";
@@ -23,13 +24,12 @@ const PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
  * - changing page size
  * - jumping directly to a page
  *
- * Backend endpoints:
- *
- *   GET  /api/v1/bookings/my?page=0&size=10
- *   GET  /api/v1/bookings/{bookingId}/timeline
- *   POST /api/v1/bookings/{bookingId}/cancel
+ * In demo auth mode booking-service resolves the current user internally.
+ * In Google auth mode the UI sends Google ID token as Authorization: Bearer <token>.
  */
 export function MyBookingsPage() {
+  const { authToken, canCallBookingApi, authMode } = useAuth();
+
   const [bookingsPage, setBookingsPage] = useState<BookingPageResponse | null>(null);
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
@@ -46,6 +46,13 @@ export function MyBookingsPage() {
   const [cancellationMessage, setCancellationMessage] = useState<string | null>(null);
 
   async function loadBookings(pageToLoad: number, sizeToLoad: number) {
+    if (!canCallBookingApi) {
+      setBookingsPage(null);
+      setBookingsLoading(false);
+      setBookingsError(null);
+      return;
+    }
+
     try {
       setBookingsLoading(true);
       setBookingsError(null);
@@ -53,6 +60,7 @@ export function MyBookingsPage() {
       const result = await bookingApi.getMyBookings({
         page: pageToLoad,
         size: sizeToLoad,
+        authToken,
       });
 
       setBookingsPage(result);
@@ -66,7 +74,7 @@ export function MyBookingsPage() {
 
   useEffect(() => {
     loadBookings(page, pageSize);
-  }, [page, pageSize]);
+  }, [page, pageSize, canCallBookingApi, authToken]);
 
   async function openTimeline(bookingId: UUID) {
     try {
@@ -86,6 +94,10 @@ export function MyBookingsPage() {
   }
 
   async function cancelBooking(bookingId: UUID) {
+    if (!canCallBookingApi) {
+      return;
+    }
+
     const confirmed = window.confirm("Cancel this booking?");
 
     if (!confirmed) {
@@ -97,7 +109,7 @@ export function MyBookingsPage() {
       setCancellationError(null);
       setCancellationMessage(null);
 
-      const cancelledBooking = await bookingApi.cancelBooking(bookingId);
+      const cancelledBooking = await bookingApi.cancelBooking(bookingId, authToken);
 
       setCancellationMessage(`Booking ${cancelledBooking.bookingId} cancelled.`);
 
@@ -158,10 +170,18 @@ export function MyBookingsPage() {
           </p>
         </div>
 
-        <button className="secondary-button secondary-button-strong" type="button" onClick={reloadCurrentPage}>
+        <button
+          className="secondary-button secondary-button-strong"
+          type="button"
+          onClick={reloadCurrentPage}
+        >
           Refresh
         </button>
       </div>
+
+      {authMode === "google" && !canCallBookingApi && (
+        <div className="state-card">Sign in with Google to load your bookings.</div>
+      )}
 
       {cancellationMessage !== null && (
         <div className="feedback-banner feedback-banner-success">
@@ -172,7 +192,9 @@ export function MyBookingsPage() {
 
       {cancellationError !== null && <ErrorMessage error={cancellationError} />}
 
-      {bookingsLoading && <LoadingState text="Loading current user bookings..." />}
+      {bookingsLoading && canCallBookingApi && (
+        <LoadingState text="Loading current user bookings..." />
+      )}
 
       {!bookingsLoading && bookingsError !== null && <ErrorMessage error={bookingsError} />}
 
@@ -261,7 +283,8 @@ export function MyBookingsPage() {
                               type="button"
                               disabled={
                                 !canCancelBooking(booking.status) ||
-                                cancellingBookingId === booking.bookingId
+                                cancellingBookingId === booking.bookingId ||
+                                !canCallBookingApi
                               }
                               onClick={() => cancelBooking(booking.bookingId)}
                             >

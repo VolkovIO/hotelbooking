@@ -72,6 +72,27 @@ button {
   line-height: 1.45;
 }
 
+.app-highlights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.app-highlights span {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  background: rgba(239, 246, 255, 0.92);
+  color: #1d4ed8;
+  font-size: 13px;
+  font-weight: 850;
+}
+
+/* ===== Auth panel ===== */
+
 .auth-card {
   min-width: 180px;
   padding: 14px 16px;
@@ -81,7 +102,7 @@ button {
   box-shadow: 0 12px 34px rgba(21, 35, 55, 0.1);
 }
 
-.auth-card span,
+.auth-card > span,
 .service-link span,
 .eyebrow {
   display: block;
@@ -102,6 +123,96 @@ button {
   display: block;
   margin-top: 3px;
   color: #69778c;
+}
+
+.auth-card-google {
+  min-width: 260px;
+}
+
+.google-login-compact {
+  display: flex;
+    justify-content: flex-start;
+    margin-top: 12px;
+}
+
+.google-login-copy strong {
+  display: flex;
+    justify-content: flex-start;
+    margin-top: 12px;
+}
+
+.google-login-copy small {
+  display: block;
+  margin-top: 4px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.google-login-icon-wrapper {
+  display: flex;
+    justify-content: flex-start;
+    margin-top: 12px;
+}
+
+.google-user {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.google-user img {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px #dbeafe;
+}
+
+.google-user-text {
+  min-width: 0;
+}
+
+.google-user-text strong {
+  display: block;
+  margin: 0;
+  color: #172033;
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.google-user-text small {
+  display: block;
+  max-width: 190px;
+  margin-top: 3px;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-signout-button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  margin-top: 12px;
+  padding: 9px 12px;
+  border: 1px solid #fda4af;
+  border-radius: 999px;
+  background: #ffe4e6;
+  color: #be123c;
+  font-size: 13px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.auth-signout-button:hover {
+  background: #fecdd3;
+}
+
+.auth-signout-button:active {
+  transform: translateY(1px);
 }
 
 /* ===== Runtime details ===== */
@@ -1451,24 +1562,5 @@ tbody tr:last-child td {
     flex-direction: column;
   }
 
-  /* ===== App capability chips ===== */
 
-  .app-highlights {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 10px;
-  }
-
-  .app-highlights span {
-    display: inline-flex;
-    align-items: center;
-    padding: 6px 10px;
-    border: 1px solid #bfdbfe;
-    border-radius: 999px;
-    background: rgba(239, 246, 255, 0.92);
-    color: #1d4ed8;
-    font-size: 13px;
-    font-weight: 850;
-  }
 }

@@ -1,19 +1,23 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { GoogleOAuthProvider } from "@react-oauth/google";
 import App from "./App";
+import { AuthProvider } from "./auth/AuthContext";
+import { appConfig } from "./config/appConfig";
 import "./styles/global.css";
 
-/**
- * React application entry point.
- *
- * index.html contains:
- *
- *   <div id="root"></div>
- *
- * React finds this element and renders our App component inside it.
- */
-ReactDOM.createRoot(document.getElementById("root")!).render(
+const app = (
   <React.StrictMode>
-    <App />
-  </React.StrictMode>,
+    <AuthProvider>
+      <App />
+    </AuthProvider>
+  </React.StrictMode>
+);
+
+ReactDOM.createRoot(document.getElementById("root")!).render(
+  appConfig.authMode === "google" && appConfig.googleClientId.length > 0 ? (
+    <GoogleOAuthProvider clientId={appConfig.googleClientId}>{app}</GoogleOAuthProvider>
+  ) : (
+    app
+  ),
 );

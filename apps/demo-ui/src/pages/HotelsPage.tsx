@@ -10,6 +10,7 @@ import {
   type SagaEngine,
   type UUID,
 } from "../api";
+import { useAuth } from "../auth/AuthContext";
 import { ErrorMessage } from "../components/ErrorMessage";
 import { LoadingState } from "../components/LoadingState";
 import { TechnicalId } from "../components/TechnicalId";
@@ -33,7 +34,7 @@ const DEFAULT_TO = "2030-06-12";
 const DEFAULT_PAYMENT_AMOUNT = 1500;
 
 /**
- * HotelsPage currently contains the whole first demo flow:
+ * HotelsPage currently contains the main demo booking flow:
  *
  * 1. Load hotels from inventory-service.
  * 2. Open hotel details.
@@ -41,10 +42,12 @@ const DEFAULT_PAYMENT_AMOUNT = 1500;
  * 4. Check availability.
  * 5. Start booking saga.
  *
- * This is intentionally kept in one file for the first UI iteration.
- * Later, after the flow is stable, we can split it into smaller pages/components.
+ * In demo auth mode booking-service resolves the current user internally.
+ * In Google auth mode the UI sends Google ID token as Authorization: Bearer <token>.
  */
 export function HotelsPage() {
+  const { authToken, canCallBookingApi, authMode } = useAuth();
+
   const [hotels, setHotels] = useState<HotelSummaryResponse[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState<unknown>(null);
@@ -77,12 +80,13 @@ export function HotelsPage() {
   );
 
   /**
-   * A very small client-side check.
+   * A small client-side check.
    *
    * The backend is still the source of truth. This check only helps the demo UI
    * avoid sending obviously incomplete requests.
    */
   const canStartBookingSaga =
+    canCallBookingApi &&
     selectedHotel !== null &&
     selectedRoomTypeId !== null &&
     availabilityFrom.length > 0 &&
@@ -145,6 +149,14 @@ export function HotelsPage() {
     }
   }
 
+  function selectRoomType(roomTypeId: UUID) {
+    setSelectedRoomTypeId(roomTypeId);
+    setAvailability([]);
+    setAvailabilityError(null);
+    setBookingSagaResult(null);
+    setBookingSagaError(null);
+  }
+
   async function checkAvailability() {
     if (selectedHotel === null || selectedRoomTypeId === null) {
       return;
@@ -171,7 +183,7 @@ export function HotelsPage() {
   }
 
   async function startBookingSaga() {
-    if (selectedHotel === null || selectedRoomTypeId === null) {
+    if (selectedHotel === null || selectedRoomTypeId === null || !canCallBookingApi) {
       return;
     }
 
@@ -191,6 +203,7 @@ export function HotelsPage() {
           paymentCurrency: paymentCurrency.trim().toUpperCase(),
         },
         sagaEngine,
+        authToken,
       );
 
       setBookingSagaResult(result);
@@ -208,12 +221,11 @@ export function HotelsPage() {
           <p className="eyebrow">Inventory catalog</p>
           <h1>Hotels</h1>
           <p className="page-description">
-            Select a hotel, inspect its room types, check availability and start
-            the booking saga.
+            Select a hotel, inspect its room types, check availability and start the booking saga.
           </p>
         </div>
 
-        <button className="secondary-button" type="button" onClick={() => window.location.reload()}>
+        <button className="secondary-button secondary-button-strong" type="button" onClick={() => window.location.reload()}>
           Reload
         </button>
       </div>
@@ -224,7 +236,7 @@ export function HotelsPage() {
 
       {!catalogLoading && catalogError === null && hotels.length === 0 && (
         <div className="state-card">
-          No hotels found. Check Mongo demo data or use the future Inventory Admin page.
+          No hotels found. Check Mongo demo data or use the Inventory Admin page.
         </div>
       )}
 
@@ -257,7 +269,7 @@ export function HotelsPage() {
 
               <div className="technical-id">
                 <span>hotelId</span>
-                <code>{hotel.hotelId}</code>
+                <TechnicalId value={hotel.hotelId} />
               </div>
 
               <button
@@ -287,11 +299,13 @@ export function HotelsPage() {
         paymentAmount={paymentAmount}
         paymentCurrency={paymentCurrency}
         sagaEngine={sagaEngine}
+        authMode={authMode}
+        canCallBookingApi={canCallBookingApi}
         canStartBookingSaga={canStartBookingSaga}
         bookingSagaLoading={bookingSagaLoading}
         bookingSagaError={bookingSagaError}
         bookingSagaResult={bookingSagaResult}
-        onRoomTypeChange={setSelectedRoomTypeId}
+        onRoomTypeChange={selectRoomType}
         onAvailabilityFromChange={setAvailabilityFrom}
         onAvailabilityToChange={setAvailabilityTo}
         onGuestCountChange={setGuestCount}
@@ -320,6 +334,8 @@ type HotelDetailsPanelProps = {
   paymentAmount: number;
   paymentCurrency: string;
   sagaEngine: SagaEngine;
+  authMode: "demo" | "google";
+  canCallBookingApi: boolean;
   canStartBookingSaga: boolean;
   bookingSagaLoading: boolean;
   bookingSagaError: unknown;
@@ -350,6 +366,8 @@ function HotelDetailsPanel({
   paymentAmount,
   paymentCurrency,
   sagaEngine,
+  authMode,
+  canCallBookingApi,
   canStartBookingSaga,
   bookingSagaLoading,
   bookingSagaError,
@@ -435,7 +453,7 @@ function HotelDetailsPanel({
           {selectedRoomType !== null && (
             <div className="technical-id technical-id-compact">
               <span>roomTypeId</span>
-              <code>{selectedRoomType.roomTypeId}</code>
+              <TechnicalId value={selectedRoomType.roomTypeId} />
             </div>
           )}
         </div>
@@ -491,6 +509,8 @@ function HotelDetailsPanel({
         paymentAmount={paymentAmount}
         paymentCurrency={paymentCurrency}
         sagaEngine={sagaEngine}
+        authMode={authMode}
+        canCallBookingApi={canCallBookingApi}
         canStartBookingSaga={canStartBookingSaga}
         loading={bookingSagaLoading}
         error={bookingSagaError}
@@ -537,7 +557,9 @@ function AvailabilityTable({ availability }: AvailabilityTableProps) {
                 <td>{day.heldRooms}</td>
                 <td>{day.bookedRooms}</td>
                 <td>
-                  <strong className={day.availableRooms > 0 ? "available-positive" : "available-zero"}>
+                  <strong
+                    className={day.availableRooms > 0 ? "available-positive" : "available-zero"}
+                  >
                     {day.availableRooms}
                   </strong>
                 </td>
@@ -555,6 +577,8 @@ type BookingSagaFormProps = {
   paymentAmount: number;
   paymentCurrency: string;
   sagaEngine: SagaEngine;
+  authMode: "demo" | "google";
+  canCallBookingApi: boolean;
   canStartBookingSaga: boolean;
   loading: boolean;
   error: unknown;
@@ -571,6 +595,8 @@ function BookingSagaForm({
   paymentAmount,
   paymentCurrency,
   sagaEngine,
+  authMode,
+  canCallBookingApi,
   canStartBookingSaga,
   loading,
   error,
@@ -588,8 +614,8 @@ function BookingSagaForm({
           <p className="eyebrow">Booking saga</p>
           <h3>Create booking</h3>
           <p className="muted-text">
-            This calls booking-service and starts the distributed flow:
-            inventory hold → payment authorization → booking confirmation.
+            This calls booking-service and starts the distributed flow: inventory hold → payment
+            authorization → booking confirmation.
           </p>
         </div>
 
@@ -598,6 +624,12 @@ function BookingSagaForm({
           <span>paymentAmount &gt; 50000 demonstrates payment decline.</span>
         </div>
       </div>
+
+      {authMode === "google" && !canCallBookingApi && (
+        <div className="state-card">
+          Sign in with Google to start booking saga.
+        </div>
+      )}
 
       <div className="booking-form-grid">
         <label>
@@ -685,8 +717,8 @@ function BookingSagaResult({ result }: BookingSagaResultProps) {
       </div>
 
       <p className="muted-text">
-        The saga may continue asynchronously. Later we will add My bookings and Audit timeline
-        screens to observe status changes.
+        The saga may continue asynchronously. Open My bookings to observe final status and audit
+        timeline.
       </p>
     </div>
   );
