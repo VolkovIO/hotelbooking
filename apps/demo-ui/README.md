@@ -1,119 +1,84 @@
 # Hotel Booking Demo UI
 
-Minimal React + Vite + TypeScript UI for demonstrating the local `hotelbooking` platform.
+Thin React + Vite + TypeScript UI for demonstrating the local Hotel Booking backend flow.
 
-The UI is intentionally thin. Its purpose is not to replace backend APIs, but to make the distributed booking flow easy to show during a demo:
+The UI is not the main product. It is a presentation layer for the backend case study: inventory availability, booking saga, Google-authenticated user bookings, cancellation and audit timeline.
 
-- hotel catalog and room availability from `inventory-service`;
-- booking saga creation through `booking-service`;
-- Google-authenticated current user booking list;
-- booking cancellation;
-- audit timeline from `audit-service`;
-- simple inventory admin operations for local demo data.
+## Runtime routes
 
-## Runtime service routes
+During local development Vite proxies frontend routes to backend services:
 
-The UI talks to backend services through Vite proxy routes:
-
-| UI route | Backend service | Default local port |
-|---|---:|---:|
+| UI route | Backend service | Default port |
+|---|---|---:|
 | `/booking-api` | `booking-service` | `8080` |
 | `/inventory-api` | `inventory-service` | `8081` |
 | `/audit-api` | `audit-service` | `8084` |
 
-The routes are configured through environment variables and proxied by Vite during local development.
-
 ## Environment files
 
-This application uses Vite environment variables.
-
-Recommended setup:
-
-| File | Committed | Purpose |
+| File | Commit? | Purpose |
 |---|---:|---|
-| `.env` | yes | Default project settings for local demo. In this project it enables Google auth by default. |
-| `.env.example` | yes | Template and documentation for supported variables. |
-| `.env.local` | no | Personal local overrides. Use it to switch to `demo` mode without changing committed files. |
+| `.env` | yes | Default project settings. Google auth is enabled by default. |
+| `.env.example` | yes | Template and explanation. |
+| `.env.local` | no | Personal overrides, for example switching to demo auth. |
 
-All variables exposed to the frontend must start with `VITE_`.
+`VITE_GOOGLE_CLIENT_ID` is a public browser OAuth client id, not a secret.
 
-`VITE_GOOGLE_CLIENT_ID` is a public browser OAuth client id. It is not a secret. Do not put OAuth client secrets into frontend environment files.
+## Google auth mode
 
-## Auth modes
-
-### Google mode
-
-Default mode for the demo UI.
+Default mode:
 
 ```env
 VITE_AUTH_MODE=google
-VITE_GOOGLE_CLIENT_ID=<google-web-client-id>.apps.googleusercontent.com
 ```
 
-In this mode:
+Flow:
 
-1. the browser signs in with Google;
-2. Google returns an ID token;
-3. the UI sends the token to `booking-service` as:
+1. User signs in with Google.
+2. Google returns an ID token.
+3. UI sends it to booking-service:
 
 ```http
 Authorization: Bearer <google-id-token>
 ```
 
-`booking-service` must be started with a JWT security profile, for example:
+Required backend profile:
 
 ```text
-spring.profiles.active=dev-jwt
+booking-service: dev-jwt
 ```
 
-The Google client id used by the UI must match the JWT audience accepted by `booking-service`.
-
-The Google OAuth client must allow the local JavaScript origin:
+Google OAuth client must allow:
 
 ```text
 http://localhost:5173
 ```
 
-If the UI is opened through a different origin, for example `http://127.0.0.1:5173`, that origin must also be added in Google Cloud Console.
+## Demo auth mode
 
-### Demo mode
-
-Use demo mode when you want to run the UI without Google sign-in.
-
-Create a local override file:
+Create local override:
 
 ```text
 apps/demo-ui/.env.local
 ```
 
-with:
-
 ```env
 VITE_AUTH_MODE=demo
 ```
 
-Then restart Vite.
+Restart Vite. In this mode the UI does not send an Authorization header.
 
-In demo mode the UI does not send an `Authorization` header. `booking-service` must be started with the dev security profile, for example:
+Required backend profile:
 
 ```text
-spring.profiles.active=dev
+booking-service: dev
 ```
 
-The backend will use the demo user configured by the service, currently `dev@example.com`.
-
-## Local start
-
-Install dependencies once:
+## Start
 
 ```bash
 cd apps/demo-ui
 npm install
-```
-
-Start the Vite dev server:
-
-```bash
 npm run dev
 ```
 
@@ -129,90 +94,7 @@ Build check:
 npm run build
 ```
 
-## Demo scenario
+## Demo runbook
 
-### 1. Create or verify inventory data
+See [`RUNBOOK.md`](RUNBOOK.md).
 
-Open `Inventory Admin`:
-
-1. create a hotel;
-2. add a room type;
-3. initialize availability for demo dates.
-
-Default demo dates are usually in the future, for example `2030-06-11` to `2030-06-20`.
-
-### 2. Check availability
-
-Open `Hotels`:
-
-1. select a hotel;
-2. select a room type;
-3. choose date range;
-4. click `Check availability`.
-
-### 3. Start booking saga
-
-In `Hotels`, use `Create booking`:
-
-1. choose guest count;
-2. choose payment amount;
-3. choose saga engine;
-4. click `Start booking saga`.
-
-Demo payment rule:
-
-| Payment amount | Expected flow |
-|---:|---|
-| `<= 50000` | happy path / payment authorization succeeds |
-| `> 50000` | payment decline / compensation flow |
-
-### 4. View booking status and timeline
-
-Open `My bookings`:
-
-1. inspect current user bookings;
-2. open `Timeline` for a booking;
-3. verify events from `audit-service`;
-4. cancel active booking if needed.
-
-## Troubleshooting
-
-### Google button is not shown
-
-Check that `apps/demo-ui/.env` or `apps/demo-ui/.env.local` contains:
-
-```env
-VITE_AUTH_MODE=google
-VITE_GOOGLE_CLIENT_ID=<google-web-client-id>.apps.googleusercontent.com
-```
-
-Restart Vite after changing env files.
-
-### Google sign-in fails with `no registered origin`
-
-Add the local Vite origin to the OAuth client in Google Cloud Console:
-
-```text
-http://localhost:5173
-```
-
-The origin must match exactly how you open the UI.
-
-### Booking API returns 401
-
-Check that UI auth mode and `booking-service` security profile match:
-
-| UI mode | booking-service profile |
-|---|---|
-| `google` | `dev-jwt` or another JWT profile |
-| `demo` | `dev` or another dev security profile |
-
-`google` UI mode sends a bearer token. `demo` UI mode does not.
-
-### Environment changes do not apply
-
-Vite reads env files at startup. Stop and restart the dev server.
-
-### Logs are not colored with `dev-jwt`
-
-Make sure the shared Logback profile configuration treats `dev-jwt` as a local/dev profile. The production-like `!dev` block must not override the colored pattern for `dev-jwt`.
